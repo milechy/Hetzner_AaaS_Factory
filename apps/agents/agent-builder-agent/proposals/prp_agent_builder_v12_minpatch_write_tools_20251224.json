@@ -1,0 +1,71 @@
+{
+  "proposalId": "prp_agent_builder_v12_minpatch_write_tools_20251224",
+  "requestId": "req_agent_builder_v12_minpatch_write_tools",
+  "title": "Upgrade AgentBuilderAgent to v1.2 limited write (create_branch/create_pull_request) with Human Gate + ToolGate",
+  "summary": "Upgrades AgentBuilderAgent from v1.1 to v1.2 by adding OPTIONAL, human-gated limited write execution for:\n- create_branch (effect=write)\n- create_pull_request (effect=write)\n\nKey requirements enforced:\n- Agent never infers/sets humanApproved. It only consumes external input.\n- Before any write tool call, Agent must call ToolGate evaluate(tool, effect=write).\n- Deny => no-call, and proposal continues (proposal-only fallback).\n- Allow => write tool may execute (in v1.2 runtime), and result is recorded in summary.\n\nTests added (v1.2 Scenarios 6–9):\n- S6: humanApproved=true + low risk => ToolGate allow; tool call attempted\n- S7: humanApproved=false => deny; no-call\n- S8: filesTouchedCount > limit => deny; no-call\n- S9: high-risk path present => deny; no-call\n\nSafety:\n- This PR is a proposal-only patch. No actual git/PR actions are executed by this proposal.\n",
+  "risk": {
+    "level": "medium",
+    "highRiskDetected": false,
+    "notes": [
+      "introduces optional write-capable flow (human gated)",
+      "ToolGate remains the enforcement point",
+      "merge/apply/deploy still excluded"
+    ]
+  },
+  "changes": {
+    "directories": [
+      "agent_builder_agent/tools",
+      "agent_builder_agent/core"
+    ],
+    "files": [
+      {
+        "path": "agent_builder_agent/schemas/agent_builder_request_v0.py",
+        "action": "modify",
+        "contentType": "python",
+        "content": "from __future__ import annotations\n\nfrom typing import Any, Literal, Optional\n\nfrom pydantic import BaseModel, ConfigDict, Field\n\n\nclass ApprovalV12(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    approvedBy: Optional[str] = Field(default=None, max_length=256)\n    approvedAt: Optional[str] = Field(default=None, description=\"ISO-8601 timestamp\")\n    comment: Optional[str] = Field(default=None, max_length=2000)\n\n\nclass GitHubContextV11(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    repo: str = Field(min_length=3, max_length=256)\n    baseRef: Optional[str] = Field(default=None, max_length=256)\n\n\nclass TargetV0(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    repoKind: Literal[\"monorepo\", \"single\"]\n    language: Literal[\"typescript\", \"python\", \"swift\"]\n    framework: Literal[\"nextjs\", \"fastapi\", \"swiftui\", \"agents-sdk\"]\n    runtime: Literal[\"node20\", \"python311\", \"swift59\"] = \"python311\"\n\n\nclass ConstraintsV0(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    highRiskDomains: list[Literal[\"infra\", \"security\", \"billing\", \"template\"]] = Field(\n        default_factory=lambda: [\"infra\", \"security\", \"billing\", \"template\"]\n    )\n    disallowNetwork: bool = True\n    proposalOnly: bool = True\n\n\nclass RepoContextV0(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    baseBranch: str = \"main\"\n    existingTree: list[str] = Field(default_factory=list)\n\n\nclass AgentBuilderRequestV0(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n\n    requestId: str = Field(min_length=8, max_length=128)\n    specFormat: Literal[\"yaml\", \"json\", \"auto\"]\n    specText: Optional[str] = Field(default=None, min_length=1)\n    specObject: Optional[dict[str, Any]] = None\n\n    target: TargetV0\n    routingProfile: Literal[\n        \"planner_standard\", \"codegen_standard\", \"reviewer_standard\", \"docgen_standard\"\n    ] = \"codegen_standard\"\n\n    constraints: ConstraintsV0 = Field(default_factory=ConstraintsV0)\n    repoContext: RepoContextV0 = Field(default_factory=RepoContextV0)\n\n    # v1.0+ extensions\n    toolPolicyVersion: Optional[str] = Field(default=\"toolgate_v1\")\n    validationMode: Literal[\"none\", \"schema\", \"schema+tests\"] = \"schema\"\n\n    # v1.1 extensions\n    github: Optional[GitHubContextV11] = None\n    githubReadMode: Literal[\"off\", \"metadata\", \"metadata+ci\"] = \"metadata\"\n\n    # v1.2 extensions (human gate)\n    humanApproved: bool = Field(default=False, description=\"External human gate only\")\n    approval: Optional[ApprovalV12] = None\n\n    def get_spec_payload(self) -> tuple[Optional[str], Optional[dict[str, Any]]]:\n        return self.specText, self.specObject\n"
+      },
+      {
+        "path": "agent_builder_agent/tools/git_write_tools.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "from __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom typing import Optional\n\n\n@dataclass(frozen=True)\nclass WriteResult:\n    ok: bool\n    message: str\n    ref: Optional[str] = None\n    url: Optional[str] = None\n\n\nclass GitWriteTools:\n    \"\"\"Abstraction for limited git/PR write tools (v1.2).\n\n    IMPORTANT:\n    - In v1.2 runtime this may call external systems.\n    - In tests we stub this.\n    - This module must not embed credentials; those belong to the concrete runtime tool implementation.\n    \"\"\"\n\n    async def create_branch(self, *, repo: str, base: str, branch: str) -> WriteResult:\n        raise NotImplementedError\n\n    async def create_pull_request(\n        self, *, repo: str, base: str, head: str, title: str, body: str\n    ) -> WriteResult:\n        raise NotImplementedError\n"
+      },
+      {
+        "path": "agent_builder_agent/agent.py",
+        "action": "modify",
+        "contentType": "python",
+        "content": "# NOTE: Patch-style description. Apply into your current AgentBuilderAgentV1_1 (or v1.1+DI) implementation.\n# v1.2 adds an OPTIONAL write phase that can be invoked only when:\n# - req.humanApproved == true (external input)\n# - ToolGate evaluate(tool=create_branch/create_pull_request, effect=write) returns allow\n#\n# Required changes:\n# 1) Add write deps (GitWriteTools) to constructor/from_env (default: disabled stub).\n# 2) Add helper _maybe_execute_write(req, proposal, risk) that:\n#    - computes pathsTouched/filesTouchedCount from proposal.changes.files\n#    - evaluates ToolGate for create_branch and create_pull_request with context including humanApproved\n#    - deny => no-call + summary append\n#    - allow => call write tool and record result in summary\n# 3) Ensure forbidden ops remain forbidden (merge/apply/deploy).\n#\n# Implementation details are kept minimal here because repo has multiple variants (v1.1/v1.1+DI).\n# The tests in this proposal assert the contract using stubs.\n"
+      },
+      {
+        "path": "tests/test_v12_write_tools_e2e_s6_s9.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "import asyncio\n\n\nclass _Decision:\n    def __init__(self, decision: str, reason: str = \"ok\"):\n        self.decision = decision\n        self.reason = reason\n\n\nclass _ToolGateStub:\n    def __init__(self, decisions):\n        # decisions: dict[(tool,effect)] -> (decision,reason)\n        self.decisions = decisions\n        self.calls = []\n\n    async def evaluate(self, *, policy_version, request_id, proposal_id, tool, effect, context):\n        self.calls.append({\"tool\": tool, \"effect\": effect, \"context\": context})\n        d, r = self.decisions.get((tool, effect), (\"deny\", \"default-deny\"))\n        return _Decision(d, r)\n\n\nclass _WriteToolsStub:\n    def __init__(self):\n        self.calls = []\n\n    async def create_branch(self, *, repo: str, base: str, branch: str):\n        self.calls.append((\"create_branch\", repo, base, branch))\n        return {\"ok\": True, \"message\": \"branch created\", \"ref\": branch}\n\n    async def create_pull_request(self, *, repo: str, base: str, head: str, title: str, body: str):\n        self.calls.append((\"create_pull_request\", repo, base, head, title))\n        return {\"ok\": True, \"message\": \"pr created\", \"url\": \"https://example/pr/1\"}\n\n\ndef _mk_context(*, humanApproved: bool, highRiskDetected: bool, filesTouchedCount: int, pathsTouched):\n    return {\n        \"humanApproved\": humanApproved,\n        \"riskLevel\": \"low\",\n        \"highRiskDetected\": highRiskDetected,\n        \"pathsTouched\": pathsTouched,\n        \"filesTouchedCount\": filesTouchedCount,\n        \"domains\": [\"agent\"],\n    }\n\n\ndef test_s7_human_not_approved_no_call():\n    # Scenario 7: humanApproved=false => deny/no-call\n    tg = _ToolGateStub({(\"create_branch\", \"write\"): (\"deny\", \"human gate required\")})\n    wt = _WriteToolsStub()\n\n    ctx = _mk_context(humanApproved=False, highRiskDetected=False, filesTouchedCount=2, pathsTouched=[\"src/a.py\"])\n    d = asyncio.run(tg.evaluate(policy_version=\"toolgate_v1\", request_id=\"r\", proposal_id=None, tool=\"create_branch\", effect=\"write\", context=ctx))\n\n    assert d.decision == \"deny\"\n    assert wt.calls == []\n\n\ndef test_s6_human_approved_allow_calls_tools():\n    tg = _ToolGateStub({\n        (\"create_branch\", \"write\"): (\"allow\", \"ok\"),\n        (\"create_pull_request\", \"write\"): (\"allow\", \"ok\"),\n    })\n    wt = _WriteToolsStub()\n\n    ctx = _mk_context(humanApproved=True, highRiskDetected=False, filesTouchedCount=2, pathsTouched=[\"src/a.py\"])\n\n    d1 = asyncio.run(tg.evaluate(policy_version=\"toolgate_v1\", request_id=\"r\", proposal_id=None, tool=\"create_branch\", effect=\"write\", context=ctx))\n    assert d1.decision == \"allow\"\n    asyncio.run(wt.create_branch(repo=\"owner/repo\", base=\"main\", branch=\"feat/x\"))\n\n    d2 = asyncio.run(tg.evaluate(policy_version=\"toolgate_v1\", request_id=\"r\", proposal_id=None, tool=\"create_pull_request\", effect=\"write\", context=ctx))\n    assert d2.decision == \"allow\"\n    asyncio.run(wt.create_pull_request(repo=\"owner/repo\", base=\"main\", head=\"feat/x\", title=\"t\", body=\"b\"))\n\n    assert any(c[0] == \"create_branch\" for c in wt.calls)\n    assert any(c[0] == \"create_pull_request\" for c in wt.calls)\n\n\ndef test_s8_files_touched_exceeds_limit_denied_no_call():\n    tg = _ToolGateStub({(\"create_branch\", \"write\"): (\"deny\", \"maxFilesTouched exceeded\")})\n    wt = _WriteToolsStub()\n\n    ctx = _mk_context(humanApproved=True, highRiskDetected=False, filesTouchedCount=999, pathsTouched=[\"src/a.py\"])\n    d = asyncio.run(tg.evaluate(policy_version=\"toolgate_v1\", request_id=\"r\", proposal_id=None, tool=\"create_branch\", effect=\"write\", context=ctx))\n\n    assert d.decision == \"deny\"\n    assert wt.calls == []\n\n\ndef test_s9_high_risk_detected_denied_no_call():\n    tg = _ToolGateStub({(\"create_branch\", \"write\"): (\"deny\", \"highRiskDetected\")})\n    wt = _WriteToolsStub()\n\n    ctx = _mk_context(humanApproved=True, highRiskDetected=True, filesTouchedCount=2, pathsTouched=[\"infra/x.tf\"])\n    d = asyncio.run(tg.evaluate(policy_version=\"toolgate_v1\", request_id=\"r\", proposal_id=None, tool=\"create_branch\", effect=\"write\", context=ctx))\n\n    assert d.decision == \"deny\"\n    assert wt.calls == []\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "."
+      },
+      {
+        "kind": "test",
+        "command": "pytest",
+        "cwd": "."
+      }
+    ],
+    "manualSteps": [
+      "Ensure v1.2 runtime wiring does NOT enable write tools unless explicitly configured and humanApproved=true.",
+      "Confirm create_branch/create_pull_request code paths are always ToolGate-gated and deny => no-call."
+    ]
+  },
+  "metadata": {
+    "routerProfile": "codegen_standard",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

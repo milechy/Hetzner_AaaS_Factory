@@ -1,0 +1,80 @@
+{
+  "proposalId": "prp_abcd1234ef567890",
+  "requestId": "req_20251224_0001",
+  "title": "Scaffold AgentBuilderAgent Demo skeleton (proposal-only)",
+  "summary": "Generates a minimal skeleton for 'AgentBuilderAgent Demo' based on the provided spec. Outputs are proposal-only; no git/infra/secret operations are performed. Steps were inferred.\n\nPurpose: Generate a safe proposal-only skeleton for an agents-sdk based project.",
+  "risk": {
+    "level": "low",
+    "highRiskDetected": false,
+    "notes": []
+  },
+  "changes": {
+    "directories": [
+      "agent_builder_agent",
+      "agent_builder_agent/core",
+      "agent_builder_agent/router",
+      "agent_builder_agent/schemas",
+      "tests"
+    ],
+    "files": [
+      {
+        "path": "pyproject.toml",
+        "action": "create",
+        "contentType": "text",
+        "content": "[project]\nname = \"agentbuilderagent-demo\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\ndependencies = [\n  \"pydantic>=2.8.0\",\n  \"pyyaml>=6.0.2\",\n  \"httpx>=0.27.0\",\n  \"pytest>=8.0.0\",\n]\n"
+      },
+      {
+        "path": "README.md",
+        "action": "create",
+        "contentType": "md",
+        "content": "# AgentBuilderAgent Demo\n\nProposal-only scaffold example.\n\n## Run\n- Provide a valid AgentBuilderRequestV0 JSON and run your CLI.\n"
+      },
+      {
+        "path": "agent_builder_agent/__init__.py",
+        "action": "create",
+        "contentType": "python",
+        "content": ""
+      },
+      {
+        "path": "agent_builder_agent/agent.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "from __future__ import annotations\n\n# Demo placeholder: wire AgentBuilderAgentV0 here.\n"
+      },
+      {
+        "path": "tests/test_smoke.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "def test_smoke():\n    assert True\n"
+      }
+    ],
+    "dependencies": [
+      {
+        "ecosystem": "pip",
+        "name": "pydantic",
+        "requestedVersion": ">=2.8.0",
+        "reason": "Schema validation and typed models."
+      }
+    ]
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "."
+      },
+      {
+        "kind": "test",
+        "command": "pytest",
+        "cwd": "."
+      }
+    ],
+    "manualSteps": []
+  },
+  "metadata": {
+    "routerProfile": "codegen_standard",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

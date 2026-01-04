@@ -1,0 +1,70 @@
+{
+  "proposalId": "prp_11223344aabbccdd",
+  "requestId": "req_20251224_0002",
+  "title": "Scaffold Billing-Aware Agent skeleton (proposal-only)",
+  "summary": "Generates a minimal skeleton for 'Billing-Aware Agent' based on the provided spec. Outputs are proposal-only; no git/infra/secret operations are performed. Steps were inferred.\n\nPurpose: Propose a skeleton but do not generate any billing/infra/security/template files in v0.",
+  "risk": {
+    "level": "high",
+    "highRiskDetected": true,
+    "notes": [
+      "domain_flag:billing",
+      "keyword:billing:stripe"
+    ]
+  },
+  "changes": {
+    "directories": [
+      "agent_builder_agent",
+      "agent_builder_agent/core",
+      "tests"
+    ],
+    "files": [
+      {
+        "path": "README.md",
+        "action": "create",
+        "contentType": "md",
+        "content": "# Billing-Aware Agent\n\nThis is a proposal-only scaffold.\n\n## Safety\n- v0 omits billing/infra/security/template files by policy.\n"
+      },
+      {
+        "path": "agent_builder_agent/__init__.py",
+        "action": "create",
+        "contentType": "python",
+        "content": ""
+      },
+      {
+        "path": "agent_builder_agent/agent.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "from __future__ import annotations\n\n# Proposal-only placeholder.\n"
+      },
+      {
+        "path": "tests/test_smoke.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "def test_smoke():\n    assert True\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "."
+      },
+      {
+        "kind": "test",
+        "command": "pytest",
+        "cwd": "."
+      }
+    ],
+    "manualSteps": [
+      "Human gate required: high-risk signals detected; verify omitted domains are not needed."
+    ]
+  },
+  "metadata": {
+    "routerProfile": "codegen_standard",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

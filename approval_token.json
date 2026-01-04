@@ -1,0 +1,18 @@
+{
+  "id": "afaf31b7-8c88-4b99-bf75-60344d49583e",
+  "issuedAt": "2026-01-04T09:02:39+00:00",
+  "issuedBy": "human",
+  "scope": {
+    "repo": "milechy/Hetzner_AaaS_Factory",
+    "baseBranch": "main",
+    "proposalHash": "sha256:a109b6e61b151018ca5bcf8f3379e011cc1c6276cd1ec8eeee54970f4b3528fb",
+    "expiresAt": "2026-01-04T10:02:39+00:00",
+    "actions": [
+      "prepare_branch",
+      "apply_patch",
+      "open_pr"
+    ],
+    "actorId": "hkobayashi"
+  },
+  "signature": "hmac-sha256:dda3cb445d15f9957f0d2c6db0b3b1086b0ba48ee3eff77cf33b00ee5620ac5b"
+}

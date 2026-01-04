@@ -1,0 +1,24 @@
+{
+  "decision": {
+    "allowed": false,
+    "reason": "allowlist-only; reject_if_any_reject",
+    "risk": {
+      "highRiskDetected": true,
+      "domains": [
+        "infra"
+      ],
+      "notes": [
+        "infra/docker-compose.yml: R002_block_high_risk_dirs reject (Infra is high-risk; proposal-only in v1.2.)"
+      ],
+      "blockedFiles": [
+        "infra/docker-compose.yml"
+      ]
+    },
+    "allowedFiles": [],
+    "rejectedFiles": [
+      "infra/docker-compose.yml"
+    ]
+  },
+  "normalizedProposalHash": "sha256:2e672c5d1fcb1de243bcf3e5e031302641ec28e1f136501b85d2137c86ed1a5a",
+  "warnings": []
+}

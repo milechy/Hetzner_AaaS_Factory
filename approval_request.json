@@ -1,0 +1,22 @@
+{
+  "repo": "milechy/Hetzner_AaaS_Factory",
+  "baseBranch": "main",
+  "decision": {
+    "allowed": true,
+    "reason": "allowlist-only; reject_if_any_reject",
+    "risk": {
+      "highRiskDetected": false,
+      "domains": [],
+      "notes": [
+        "docs/README.md: R101_allow_docs_non_master allow (Docs updates are low-risk; allowed by default.)"
+      ],
+      "blockedFiles": []
+    },
+    "allowedFiles": [
+      "docs/README.md"
+    ],
+    "rejectedFiles": []
+  },
+  "normalizedProposalHash": "sha256:a109b6e61b151018ca5bcf8f3379e011cc1c6276cd1ec8eeee54970f4b3528fb",
+  "warnings": []
+}

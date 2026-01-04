@@ -1,0 +1,50 @@
+{
+  "proposalId": "prp_agent_builder_v11_github_facts_integration_tests_20251224",
+  "requestId": "req_agent_builder_v11_github_facts_integration_tests",
+  "title": "Strengthen v1.1 tests: validate GitHub Facts are propagated into proposal.summary/manualSteps via build_proposal (integration-style, no network)",
+  "summary": "Adds integration-style tests that validate v1.1 GitHub Facts are actually propagated into the final PullRequestProposal output produced by AgentBuilderAgentV1_1.build_proposal().\n\nWhy:\n- The existing Scenario 4/5 tests validate _maybe_github_facts in isolation.\n- These new tests validate end-to-end propagation into proposal.summary and validation.manualSteps (the user-visible contract).\n\nApproach (no network):\n- Monkeypatch agent module functions to avoid Router/network dependencies:\n  - infer_steps_if_missing: deterministic\n  - generate_skeleton: deterministic (returns minimal skeleton)\n  - parse_spec/normalize_spec: deterministic (name/purpose)\n- Stub ToolGate to allow/deny github_read.\n- Stub GitHub client to return overlapping PRs / CI failures.\n\nSafety:\n- tests-only change.\n- no write operations.\n- no external network calls.\n",
+  "risk": {
+    "level": "low",
+    "highRiskDetected": false,
+    "notes": [
+      "tests-only",
+      "no runtime behavior changes",
+      "no network calls"
+    ]
+  },
+  "changes": {
+    "directories": [],
+    "files": [
+      {
+        "path": "tests/test_v11_github_facts_proposal_integration.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "import asyncio\n\nimport agent_builder_agent.agent as agent_mod\n\n\nclass _AllowDecision:\n    def __init__(self, decision: str, reason: str = \"ok\"):\n        self.decision = decision\n        self.reason = reason\n        self.policy_version = \"toolgate_v1\"\n\n\nclass _ToolGateStub:\n    def __init__(self, decision: str = \"allow\", reason: str = \"allowed\"):\n        self._decision = decision\n        self._reason = reason\n        self.calls = []\n\n    async def evaluate(self, *, policy_version, request_id, proposal_id, tool, effect, context):\n        self.calls.append(\n            {\n                \"policy_version\": policy_version,\n                \"request_id\": request_id,\n                \"proposal_id\": proposal_id,\n                \"tool\": tool,\n                \"effect\": effect,\n                \"context\": context,\n            }\n        )\n        return _AllowDecision(self._decision, self._reason)\n\n\nclass _GitHubStub:\n    def __init__(self, prs=None, runs=None):\n        self._prs = prs or []\n        self._runs = runs or []\n        self.calls = []\n\n    async def list_open_prs(self, repo: str):\n        self.calls.append((\"list_open_prs\", repo))\n        return self._prs\n\n    async def list_check_runs(self, repo: str, ref: str):\n        self.calls.append((\"list_check_runs\", repo, ref))\n        return self._runs\n\n\nclass _RouterStub:\n    async def complete(self, profile: str, input_text: str, context: dict):\n        # Should not be called due to monkeypatched infer_steps_if_missing.\n        return \"[]\"\n\n\ndef _mk_request_json(github_read_mode: str):\n    return {\n        \"requestId\": \"req_12345678\",\n        \"specFormat\": \"json\",\n        \"specObject\": {\"name\": \"Example Agent\", \"purpose\": \"Test\"},\n        \"target\": {\n            \"repoKind\": \"single\",\n            \"language\": \"python\",\n            \"framework\": \"agents-sdk\",\n            \"runtime\": \"python311\",\n        },\n        \"routingProfile\": \"codegen_standard\",\n        \"toolPolicyVersion\": \"toolgate_v1\",\n        \"validationMode\": \"schema\",\n        \"repoContext\": {\"baseBranch\": \"main\", \"existingTree\": []},\n        \"constraints\": {\n            \"highRiskDomains\": [\"infra\", \"security\", \"billing\", \"template\"],\n            \"disallowNetwork\": True,\n            \"proposalOnly\": True,\n        },\n        \"github\": {\"repo\": \"owner/repo\", \"baseRef\": \"main\"},\n        \"githubReadMode\": github_read_mode,\n    }\n\n\ndef test_build_proposal_includes_github_facts_and_manual_steps(monkeypatch):\n    # Arrange: monkeypatch parse/normalize + steps + skeleton so build_proposal is deterministic.\n    def _parse_spec(spec_format, spec_text, spec_obj):\n        return spec_obj\n\n    class _Parsed:\n        def __init__(self):\n            self.name = \"Example Agent\"\n            self.purpose = \"Test\"\n            self.steps = []\n            self.raw = {\"name\": \"Example Agent\", \"purpose\": \"Test\"}\n\n    def _normalize_spec(raw):\n        return _Parsed()\n\n    async def _infer_steps_if_missing(**kwargs):\n        return [\"Step A\", \"Step B\"]\n\n    class _SkFile:\n        def __init__(self, path, content_type, content):\n            self.path = path\n            self.content_type = content_type\n            self.content = content\n\n    class _Sk:\n        def __init__(self):\n            self.directories = [\"agent_builder_agent\"]\n            self.files = [_SkFile(\"README.md\", \"md\", \"# Example\")]\n            self.inferred_steps = [\"Step A\", \"Step B\"]\n\n    async def _generate_skeleton(**kwargs):\n        return _Sk()\n\n    monkeypatch.setattr(agent_mod, \"parse_spec\", _parse_spec)\n    monkeypatch.setattr(agent_mod, \"normalize_spec\", _normalize_spec)\n    monkeypatch.setattr(agent_mod, \"infer_steps_if_missing\", _infer_steps_if_missing)\n    monkeypatch.setattr(agent_mod, \"generate_skeleton\", _generate_skeleton)\n\n    # ToolGate allow + GitHub stubs returning overlap PR + CI failure.\n    prs = [{\"number\": 11, \"title\": \"Example Agent: add github read\", \"html_url\": \"u11\"}]\n    runs = [{\"name\": \"tests\", \"conclusion\": \"failure\", \"status\": \"completed\"}]\n\n    toolgate = _ToolGateStub(decision=\"allow\")\n    gh = _GitHubStub(prs=prs, runs=runs)\n\n    agent = agent_mod.AgentBuilderAgentV1_1(router=_RouterStub(), toolgate=toolgate, github=gh)\n\n    # Act\n    out = asyncio.run(agent.build_proposal(_mk_request_json(github_read_mode=\"metadata+ci\")))\n\n    # Assert: proposal contains GitHub Facts in summary and manualSteps include CI/overlap notes.\n    assert isinstance(out, dict)\n    assert \"summary\" in out\n    s = out[\"summary\"]\n    assert \"GitHub Facts\" in s\n    assert \"#11\" in s\n    assert \"Recent CI failures\" in s\n\n    # Validate manualSteps propagation (schema uses validation.manualSteps)\n    assert \"validation\" in out and isinstance(out[\"validation\"], dict)\n    ms = out[\"validation\"].get(\"manualSteps\", [])\n    assert any(\"recent CI failures\" in x.lower() for x in ms)\n    assert any(\"overlap\" in x.lower() for x in ms)\n\n    # ToolGate consulted for github_read\n    assert toolgate.calls and toolgate.calls[0][\"tool\"] == \"github_read\"\n\n\ndef test_build_proposal_when_github_read_denied_does_not_call_github(monkeypatch):\n    # Same deterministic patches\n    def _parse_spec(spec_format, spec_text, spec_obj):\n        return spec_obj\n\n    class _Parsed:\n        def __init__(self):\n            self.name = \"Example Agent\"\n            self.purpose = \"Test\"\n            self.steps = []\n            self.raw = {\"name\": \"Example Agent\", \"purpose\": \"Test\"}\n\n    def _normalize_spec(raw):\n        return _Parsed()\n\n    async def _infer_steps_if_missing(**kwargs):\n        return [\"Step A\"]\n\n    class _SkFile:\n        def __init__(self, path, content_type, content):\n            self.path = path\n            self.content_type = content_type\n            self.content = content\n\n    class _Sk:\n        def __init__(self):\n            self.directories = [\"agent_builder_agent\"]\n            self.files = [_SkFile(\"README.md\", \"md\", \"# Example\")]\n            self.inferred_steps = [\"Step A\"]\n\n    async def _generate_skeleton(**kwargs):\n        return _Sk()\n\n    monkeypatch.setattr(agent_mod, \"parse_spec\", _parse_spec)\n    monkeypatch.setattr(agent_mod, \"normalize_spec\", _normalize_spec)\n    monkeypatch.setattr(agent_mod, \"infer_steps_if_missing\", _infer_steps_if_missing)\n    monkeypatch.setattr(agent_mod, \"generate_skeleton\", _generate_skeleton)\n\n    toolgate = _ToolGateStub(decision=\"deny\", reason=\"policy deny\")\n    gh = _GitHubStub(\n        prs=[{\"number\": 1, \"title\": \"Example Agent\", \"html_url\": \"u\"}],\n        runs=[{\"name\": \"tests\", \"conclusion\": \"failure\", \"status\": \"completed\"}],\n    )\n\n    agent = agent_mod.AgentBuilderAgentV1_1(router=_RouterStub(), toolgate=toolgate, github=gh)\n\n    out = asyncio.run(agent.build_proposal(_mk_request_json(github_read_mode=\"metadata+ci\")))\n\n    s = out[\"summary\"]\n    assert \"GitHub Facts\" in s\n    assert \"deny\" in s.lower()\n\n    # No GitHub calls should have happened\n    assert gh.calls == []\n\n    # ToolGate consulted\n    assert toolgate.calls and toolgate.calls[0][\"tool\"] == \"github_read\"\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "."
+      },
+      {
+        "kind": "test",
+        "command": "pytest",
+        "cwd": "."
+      }
+    ],
+    "manualSteps": [
+      "Run pytest locally; these tests must pass without network access.",
+      "Confirm monkeypatch targets match the current agent module symbol names (parse_spec/normalize_spec/infer_steps_if_missing/generate_skeleton)."
+    ]
+  },
+  "metadata": {
+    "routerProfile": "n/a",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "proposalId": "prp_toolgate_template_v12_policy_20251224",
+  "requestId": "req_toolgate_template_policy_v12",
+  "title": "Add ToolGate template policy v1.2 rules for limited write (create_branch/create_pull_request)",
+  "summary": "Updates the ToolGate template policy to support v1.2 limited write unlock.\n\nAdds explicit allow rules (effect=write) for:\n- create_branch\n- create_pull_request\n\nMandatory conditions (AND):\n- humanApproved=true\n- riskLevel=low\n- highRiskDetected=false\n- maxFilesTouched<=10\n\nKeeps:\n- blockedWhen.pathsPrefix (infra/, ops/, .github/, templates/, security/, billing/)\n- evaluation order: blockedWhen -> allowedWhen -> default-deny\n\nSafety:\n- Policy/template update only.\n- No runtime execution.\n",
+  "risk": {
+    "level": "low",
+    "highRiskDetected": false,
+    "notes": [
+      "template policy-only update",
+      "default-deny maintained"
+    ]
+  },
+  "changes": {
+    "directories": [],
+    "files": [
+      {
+        "path": "templates/agents/toolgate/policies/toolgate_v1.yaml",
+        "action": "modify",
+        "contentType": "yaml",
+        "content": "version: toolgate_v1\n\nblockedWhen:\n  pathsPrefix:\n    - \"infra/\"\n    - \"ops/\"\n    - \".github/\"\n    - \"templates/\"\n    - \"security/\"\n    - \"billing/\"\n\ntools:\n  - tool: \"read_repo\"\n    effect: \"read\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"github_read\"\n    effect: \"read\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"schema_validate\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"proposal_validate\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"git_diff\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"ci_check\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"run_tests\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  # v1.2 limited write (human-gated)\n  - tool: \"create_branch\"\n    effect: \"write\"\n    allowedWhen:\n      humanApproved: [true]\n      riskLevel: [\"low\"]\n      highRiskDetected: [false]\n      maxFilesTouched: 10\n\n  - tool: \"create_pull_request\"\n    effect: \"write\"\n    allowedWhen:\n      humanApproved: [true]\n      riskLevel: [\"low\"]\n      highRiskDetected: [false]\n      maxFilesTouched: 10\n"
+      },
+      {
+        "path": "templates/agents/toolgate/README.md",
+        "action": "modify",
+        "contentType": "md",
+        "content": "# ToolGate Template\n\nPolicy Engine for tool execution permissioning.\n- blockedWhen -> allowedWhen -> default-deny\n- optional Bearer auth via TOOLGATE_API_KEY\n- policies loaded from TOOLGATE_POLICIES_DIR (default: ./policies)\n\n## Policy notes\n- v1.1: github_read (read-only) is allowed.\n- v1.2: limited write is supported for create_branch/create_pull_request ONLY.\n  - Requires humanApproved=true and riskLevel=low and highRiskDetected=false.\n  - Default-deny remains for everything else.\n\n## Run\n```bash\ncd templates/agents/toolgate\nexport TOOLGATE_POLICIES_DIR=\"policies\"\nuvicorn toolgate.main:app --host 0.0.0.0 --port 8088\n```\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "templates/agents/toolgate"
+      }
+    ],
+    "manualSteps": [
+      "POST /v1/evaluate tool=create_branch,effect=write with humanApproved=false -> deny",
+      "POST /v1/evaluate tool=create_branch,effect=write with humanApproved=true,riskLevel=low,highRiskDetected=false -> allow",
+      "POST /v1/evaluate with pathsTouched including 'infra/x' -> deny via blockedWhen"
+    ]
+  },
+  "metadata": {
+    "routerProfile": "n/a",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

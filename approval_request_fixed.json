@@ -1,0 +1,22 @@
+{
+  "decision": {
+    "allowed": true,
+    "reason": "allowlist-only; reject_if_any_reject",
+    "risk": {
+      "highRiskDetected": false,
+      "domains": [],
+      "notes": [
+        "docs/README.md: R101_allow_docs_non_master allow (Docs updates are low-risk; allowed by default.)"
+      ],
+      "blockedFiles": []
+    },
+    "allowedFiles": [
+      "docs/README.md"
+    ],
+    "rejectedFiles": []
+  },
+  "normalizedProposalHash": "sha256:e6df503e8cbc1a978543335e3c0c1f66af262d1f88798448dc16e2821d920382",
+  "warnings": [],
+  "repo": "org/repo",
+  "baseBranch": "main"
+}

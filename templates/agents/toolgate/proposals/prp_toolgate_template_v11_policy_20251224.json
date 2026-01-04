@@ -1,0 +1,50 @@
+{
+  "proposalId": "prp_toolgate_template_v11_policy_20251224",
+  "requestId": "req_toolgate_template_policy_v11",
+  "title": "Update ToolGate template policy to allow github_read (v1.1 read-only)",
+  "summary": "Updates the ToolGate template policy (templates/agents/toolgate) to explicitly allow github_read as a read-only tool in v1.1, aligning with SSOT:\n- master__tool_unlock_roadmap_v1__addendum_v1_1.md\n- master__tool_gate_policy_v1__addendum_v1_1.md\n\nKey changes:\n- Add a github_read rule (effect=read) with humanApproved not required.\n- Keep blockedWhen.pathsPrefix intact (still relevant for changes/write paths).\n\nSafety:\n- Policy change only; no runtime write effects.\n- Default-deny remains in effect for unmatched rules.\n",
+  "risk": {
+    "level": "low",
+    "highRiskDetected": false,
+    "notes": [
+      "policy-only update in template code",
+      "github_read is read-only and ToolGate-gated"
+    ]
+  },
+  "changes": {
+    "directories": [],
+    "files": [
+      {
+        "path": "templates/agents/toolgate/policies/toolgate_v1.yaml",
+        "action": "modify",
+        "contentType": "yaml",
+        "content": "version: toolgate_v1\n\nblockedWhen:\n  pathsPrefix:\n    - \"infra/\"\n    - \"ops/\"\n    - \".github/\"\n    - \"templates/\"\n    - \"security/\"\n    - \"billing/\"\n\ntools:\n  - tool: \"read_repo\"\n    effect: \"read\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"github_read\"\n    effect: \"read\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"schema_validate\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"proposal_validate\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"git_diff\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"ci_check\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"run_tests\"\n    effect: \"validate\"\n    allowedWhen:\n      humanApproved: [true, false]\n      riskLevel: [\"low\", \"medium\", \"high\"]\n      highRiskDetected: [true, false]\n\n  - tool: \"create_branch\"\n    effect: \"write\"\n    allowedWhen:\n      humanApproved: [true]\n      riskLevel: [\"low\"]\n      highRiskDetected: [false]\n      maxFilesTouched: 10\n\n  - tool: \"create_pull_request\"\n    effect: \"write\"\n    allowedWhen:\n      humanApproved: [true]\n      riskLevel: [\"low\"]\n      highRiskDetected: [false]\n      maxFilesTouched: 10\n"
+      },
+      {
+        "path": "templates/agents/toolgate/README.md",
+        "action": "modify",
+        "contentType": "md",
+        "content": "# ToolGate (v1.0) Template\n\nPolicy Engine for tool execution permissioning.\n- blockedWhen -> allowedWhen -> default-deny\n- optional Bearer auth via TOOLGATE_API_KEY\n- policies loaded from TOOLGATE_POLICIES_DIR (default: ./policies)\n\n## Policy notes\n- v1.0: read/validate tools allowed; write tools should remain gated.\n- v1.1: github_read (read-only) is explicitly allowed in the template policy.\n\n## Run\n```bash\ncd templates/agents/toolgate\nexport TOOLGATE_POLICIES_DIR=\"policies\"\n# optional:\n# export TOOLGATE_API_KEY=\"change-me\"\nuvicorn toolgate.main:app --host 0.0.0.0 --port 8088\n```\n\n## Example\nPOST /v1/evaluate\n```json\n{\n  \"policyVersion\": \"toolgate_v1\",\n  \"requestId\": \"req_123\",\n  \"proposalId\": \"prp_abc\",\n  \"tool\": \"github_read\",\n  \"effect\": \"read\",\n  \"context\": {\n    \"humanApproved\": false,\n    \"riskLevel\": \"low\",\n    \"highRiskDetected\": false,\n    \"pathsTouched\": [\"README.md\"],\n    \"filesTouchedCount\": 1,\n    \"domains\": [\"agent\"]\n  }\n}\n```\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "templates/agents/toolgate"
+      }
+    ],
+    "manualSteps": [
+      "Start ToolGate template and POST /v1/evaluate with tool=github_read,effect=read to confirm allow.",
+      "POST /v1/evaluate with pathsTouched including 'infra/x' to confirm deny due to blockedWhen.pathsPrefix."
+    ]
+  },
+  "metadata": {
+    "routerProfile": "n/a",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

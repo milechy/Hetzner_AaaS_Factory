@@ -1,0 +1,24 @@
+[project]
+name = "agent-builder-agent"
+version = "0.1.0"
+description = "AgentBuilderAgent v0: spec(yaml/json) -> skeleton -> PullRequestProposal(JSON)"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.8.0",
+  "pyyaml>=6.0.2",
+  "httpx>=0.27.0",
+  "python-dateutil>=2.9.0",
+  "agents>=0.0.0",  # provided by openai-agents package
+  "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.5.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,193 @@
+{
+  "policyVersion": "v1.2",
+  "defaultDecision": "reject",
+  "riskDomains": {
+    "master": {
+      "severity": "high"
+    },
+    "infra": {
+      "severity": "high"
+    },
+    "security": {
+      "severity": "high"
+    },
+    "billing": {
+      "severity": "high"
+    },
+    "template": {
+      "severity": "high"
+    },
+    "cicd": {
+      "severity": "high"
+    },
+    "db_migration": {
+      "severity": "high"
+    }
+  },
+  "rules": [
+    {
+      "id": "R001_block_master_files",
+      "decision": "reject",
+      "domain": "master",
+      "match": {
+        "pathGlobAny": [
+          "master__*.md"
+        ]
+      },
+      "reason": "SSOT master files are immutable via ControlledGitTools in v1.2."
+    },
+    {
+      "id": "R002_block_high_risk_dirs",
+      "decision": "reject",
+      "domain": "infra",
+      "match": {
+        "pathGlobAny": [
+          "infra/**"
+        ]
+      },
+      "reason": "Infra is high-risk; proposal-only in v1.2."
+    },
+    {
+      "id": "R003_block_security_dirs",
+      "decision": "reject",
+      "domain": "security",
+      "match": {
+        "pathGlobAny": [
+          "security/**",
+          "**/security/**"
+        ]
+      },
+      "reason": "Security changes require human-controlled workflow."
+    },
+    {
+      "id": "R004_block_billing_dirs",
+      "decision": "reject",
+      "domain": "billing",
+      "match": {
+        "pathGlobAny": [
+          "billing/**",
+          "**/billing/**"
+        ]
+      },
+      "reason": "Billing is high-risk; must not be auto-applied."
+    },
+    {
+      "id": "R005_block_templates_dirs",
+      "decision": "reject",
+      "domain": "template",
+      "match": {
+        "pathGlobAny": [
+          "templates/**"
+        ]
+      },
+      "reason": "Template changes are high-risk and can affect multiple projects."
+    },
+    {
+      "id": "R006_block_github_workflows",
+      "decision": "reject",
+      "domain": "cicd",
+      "match": {
+        "pathGlobAny": [
+          ".github/workflows/**"
+        ]
+      },
+      "reason": "CI/CD workflows are restricted in v1.2; CICDAgent-managed."
+    },
+    {
+      "id": "R007_block_env_files",
+      "decision": "reject",
+      "domain": "security",
+      "match": {
+        "pathGlobAny": [
+          "**/.env",
+          "**/.env.*",
+          "**/*secret*",
+          "**/*key*"
+        ]
+      },
+      "reason": "Secrets/env files must never be committed."
+    },
+    {
+      "id": "R008_block_db_migrations_prisma",
+      "decision": "reject",
+      "domain": "db_migration",
+      "match": {
+        "pathGlobAny": [
+          "api/prisma/**",
+          "**/migrations/**"
+        ]
+      },
+      "reason": "DB schema/migrations are treated as high-risk in v1.2."
+    },
+    {
+      "id": "R101_allow_docs_non_master",
+      "decision": "allow",
+      "domain": null,
+      "match": {
+        "pathGlobAny": [
+          "docs/**"
+        ],
+        "pathGlobNone": [
+          "docs/**/api_spec.yaml",
+          "docs/**/api_spec.yml"
+        ]
+      },
+      "reason": "Docs updates are low-risk; allowed by default."
+    },
+    {
+      "id": "R102_allow_tests",
+      "decision": "allow",
+      "domain": null,
+      "match": {
+        "pathGlobAny": [
+          "tests/**",
+          "api/tests/**",
+          "web/**/__tests__/**"
+        ]
+      },
+      "reason": "Test changes are low-risk; allowed by default."
+    },
+    {
+      "id": "R103_allow_web_app_code",
+      "decision": "allow",
+      "domain": null,
+      "match": {
+        "pathGlobAny": [
+          "web/**"
+        ]
+      },
+      "reason": "Web app code is allowed (subject to other blocks)."
+    },
+    {
+      "id": "R104_allow_api_src_code",
+      "decision": "allow",
+      "domain": null,
+      "match": {
+        "pathGlobAny": [
+          "api/src/**"
+        ]
+      },
+      "reason": "API source code is allowed (excluding prisma/migrations)."
+    },
+    {
+      "id": "R105_allow_scripts_non_infra",
+      "decision": "allow",
+      "domain": null,
+      "match": {
+        "pathGlobAny": [
+          "scripts/**"
+        ]
+      },
+      "reason": "Non-infra scripts are allowed (subject to content scanning if enabled)."
+    }
+  ],
+  "aggregation": {
+    "proposalDecision": "reject_if_any_reject",
+    "allowedFilesMode": "only_files_that_match_allow_rules",
+    "unmatchedFilesAre": "reject"
+  },
+  "explainability": {
+    "includeMatchedRuleIds": true,
+    "includePerFileReasons": true
+  }
+}

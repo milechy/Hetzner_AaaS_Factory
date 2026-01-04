@@ -1,0 +1,49 @@
+{
+  "proposalId": "prp_agent_builder_v11_e2e_tests_s4s5_20251224",
+  "requestId": "req_agent_builder_v11_e2e_tests_s4s5",
+  "title": "Add v1.1 E2E unit tests for GitHub Facts (Scenario 4: overlap PR, Scenario 5: CI failure)",
+  "summary": "Adds v1.1 E2E-oriented unit tests that cover:\n- Scenario 4: existing PR overlap detection surfaces a warning/manual step.\n- Scenario 5: recent CI failure (metadata+ci) surfaces failure facts and adds a manual step.\n\nDesign:\n- Tests call AgentBuilderAgentV1_1._maybe_github_facts directly with fully controlled stubs.\n- No network calls (GitHub client is stubbed).\n- ToolGate gating is enforced in tests (allow/deny).\n\nSafety:\n- Tests only. No write operations or infra changes.\n",
+  "risk": {
+    "level": "low",
+    "highRiskDetected": false,
+    "notes": [
+      "tests-only change",
+      "no runtime behavior changes"
+    ]
+  },
+  "changes": {
+    "directories": [],
+    "files": [
+      {
+        "path": "tests/test_v11_github_facts_e2e_s4_s5.py",
+        "action": "create",
+        "contentType": "python",
+        "content": "import asyncio\n\nfrom agent_builder_agent.agent import AgentBuilderAgentV1_1\nfrom agent_builder_agent.schemas.agent_builder_request_v0 import AgentBuilderRequestV0\n\n\nclass _AllowDecision:\n    def __init__(self, decision: str, reason: str = \"ok\"):\n        self.decision = decision\n        self.reason = reason\n        self.policy_version = \"toolgate_v1\"\n\n\nclass _ToolGateStub:\n    def __init__(self, decision: str = \"allow\", reason: str = \"allowed\"):\n        self._decision = decision\n        self._reason = reason\n        self.calls = []\n\n    async def evaluate(self, *, policy_version, request_id, proposal_id, tool, effect, context):\n        self.calls.append(\n            {\n                \"policy_version\": policy_version,\n                \"request_id\": request_id,\n                \"proposal_id\": proposal_id,\n                \"tool\": tool,\n                \"effect\": effect,\n                \"context\": context,\n            }\n        )\n        return _AllowDecision(self._decision, self._reason)\n\n\nclass _GitHubStub:\n    def __init__(self, prs=None, runs=None):\n        self._prs = prs or []\n        self._runs = runs or []\n        self.calls = []\n\n    async def list_open_prs(self, repo: str):\n        self.calls.append((\"list_open_prs\", repo))\n        return self._prs\n\n    async def list_check_runs(self, repo: str, ref: str):\n        self.calls.append((\"list_check_runs\", repo, ref))\n        return self._runs\n\n\nclass _RouterStub:\n    # Not used by _maybe_github_facts; included to satisfy constructor.\n    pass\n\n\ndef _mk_req(*, github_read_mode: str):\n    return AgentBuilderRequestV0.model_validate(\n        {\n            \"requestId\": \"req_12345678\",\n            \"specFormat\": \"json\",\n            \"specObject\": {\"name\": \"Example Agent\", \"purpose\": \"Test\"},\n            \"target\": {\n                \"repoKind\": \"single\",\n                \"language\": \"python\",\n                \"framework\": \"agents-sdk\",\n                \"runtime\": \"python311\",\n            },\n            \"github\": {\"repo\": \"owner/repo\", \"baseRef\": \"main\"},\n            \"githubReadMode\": github_read_mode,\n            \"repoContext\": {\"baseBranch\": \"main\", \"existingTree\": []},\n            \"constraints\": {\"highRiskDomains\": [\"infra\", \"security\", \"billing\", \"template\"], \"disallowNetwork\": True, \"proposalOnly\": True},\n        }\n    )\n\n\ndef test_s4_overlap_pr_adds_manual_step_and_facts():\n    # Scenario 4: overlapping PRs\n    prs = [\n        {\"number\": 10, \"title\": \"Unrelated\", \"html_url\": \"u10\"},\n        {\"number\": 11, \"title\": \"Example Agent: add github read\", \"html_url\": \"u11\"},\n    ]\n    toolgate = _ToolGateStub(decision=\"allow\")\n    gh = _GitHubStub(prs=prs, runs=[])\n    agent = AgentBuilderAgentV1_1(router=_RouterStub(), toolgate=toolgate, github=gh)\n\n    req = _mk_req(github_read_mode=\"metadata\")\n\n    lines, manual, decision_line = asyncio.run(\n        agent._maybe_github_facts(req, name_hint=\"Example Agent\", risk_level=\"low\", high_risk_detected=False)\n    )\n\n    assert any(\"GitHub Facts\" in x for x in lines)\n    assert any(\"Potentially overlapping\" in x or \"overlapping\" in x for x in lines)\n    assert any(\"#11\" in x for x in lines)\n    assert any(\"Potential overlap PR\" in x for x in manual)\n\n    # ToolGate was consulted for github_read\n    assert toolgate.calls and toolgate.calls[0][\"tool\"] == \"github_read\"\n    assert decision_line.startswith(\"github_read:allow\")\n\n\ndef test_s5_ci_failure_adds_manual_step_and_failure_facts():\n    # Scenario 5: recent CI failures\n    prs = []\n    runs = [\n        {\"name\": \"lint\", \"conclusion\": \"success\", \"status\": \"completed\"},\n        {\"name\": \"tests\", \"conclusion\": \"failure\", \"status\": \"completed\"},\n    ]\n    toolgate = _ToolGateStub(decision=\"allow\")\n    gh = _GitHubStub(prs=prs, runs=runs)\n    agent = AgentBuilderAgentV1_1(router=_RouterStub(), toolgate=toolgate, github=gh)\n\n    req = _mk_req(github_read_mode=\"metadata+ci\")\n\n    lines, manual, decision_line = asyncio.run(\n        agent._maybe_github_facts(req, name_hint=\"Example Agent\", risk_level=\"low\", high_risk_detected=False)\n    )\n\n    assert any(\"Recent CI failures\" in x for x in lines)\n    assert any(\"tests\" in x and \"failure\" in x for x in lines)\n    assert any(\"Reproduce or confirm recent CI failures\" in x for x in manual)\n    assert decision_line.startswith(\"github_read:allow\")\n\n    # GitHub stub should have been called for check-runs\n    assert (\"list_check_runs\", \"owner/repo\", \"main\") in gh.calls\n\n\ndef test_github_read_denied_by_toolgate_calls_no_github_api():\n    toolgate = _ToolGateStub(decision=\"deny\", reason=\"policy deny\")\n    gh = _GitHubStub(prs=[{\"number\": 1, \"title\": \"Example Agent\", \"html_url\": \"u\"}], runs=[])\n    agent = AgentBuilderAgentV1_1(router=_RouterStub(), toolgate=toolgate, github=gh)\n\n    req = _mk_req(github_read_mode=\"metadata+ci\")\n\n    lines, manual, decision_line = asyncio.run(\n        agent._maybe_github_facts(req, name_hint=\"Example Agent\", risk_level=\"low\", high_risk_detected=False)\n    )\n\n    assert any(\"github_read\" in x and \"deny\" in x for x in lines)\n    assert manual == []\n    assert decision_line.startswith(\"github_read:deny\")\n    assert gh.calls == []\n"
+      }
+    ],
+    "dependencies": []
+  },
+  "validation": {
+    "checks": [
+      {
+        "kind": "lint",
+        "command": "python -m ruff check .",
+        "cwd": "."
+      },
+      {
+        "kind": "test",
+        "command": "pytest",
+        "cwd": "."
+      }
+    ],
+    "manualSteps": [
+      "Run pytest and confirm the new v1.1 scenario tests pass without network access.",
+      "Confirm tests do not require pytest-asyncio (they use asyncio.run)."
+    ]
+  },
+  "metadata": {
+    "routerProfile": "n/a",
+    "modelAgnostic": true,
+    "createdAt": "2025-12-24T00:00:00Z"
+  }
+}

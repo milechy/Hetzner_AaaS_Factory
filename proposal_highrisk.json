@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "proposalId": "22222222-2222-2222-2222-222222222222",
+    "repo": "org/repo",
+    "baseBranch": "main",
+    "title": "Infra: change compose",
+    "body": "Should be rejected in v1.2."
+  },
+  "changes": {
+    "files": [
+      { "path": "infra/docker-compose.yml", "patch": "@@ ...", "contentBase64": "eQo=" }
+    ]
+  },
+  "risk": { "highRiskDetected": false, "domains": [], "notes": [], "blockedFiles": [] }
+}

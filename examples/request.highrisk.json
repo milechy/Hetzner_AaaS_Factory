@@ -1,0 +1,21 @@
+{
+  "requestId": "req_20251224_0002",
+  "specFormat": "yaml",
+  "specText": "name: Billing-Aware Agent\\npurpose: Propose a skeleton but do not generate any billing/infra/security/template files in v0.\\ndomains: [billing]\\nnote: \"Integrate stripe billing later\"\\n",
+  "target": {
+    "repoKind": "single",
+    "language": "python",
+    "framework": "agents-sdk",
+    "runtime": "python311"
+  },
+  "routingProfile": "codegen_standard",
+  "constraints": {
+    "highRiskDomains": ["infra", "security", "billing", "template"],
+    "disallowNetwork": true,
+    "proposalOnly": true
+  },
+  "repoContext": {
+    "baseBranch": "main",
+    "existingTree": []
+  }
+}

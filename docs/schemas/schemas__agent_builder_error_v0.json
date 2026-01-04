@@ -1,0 +1,17 @@
+{
+  "$id": "https://aaas-factory.local/schemas/agent-builder-error.v0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentBuilderErrorV0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "errorCode", "message", "details"],
+  "properties": {
+    "requestId": { "type": "string" },
+    "errorCode": {
+      "type": "string",
+      "enum": ["SPEC_PARSE_FAILED", "SPEC_VALIDATION_FAILED", "HIGH_RISK_BLOCKED", "UNSUPPORTED_TARGET", "INTERNAL_ERROR"]
+    },
+    "message": { "type": "string" },
+    "details": { "type": "array", "items": { "type": "string" }, "maxItems": 50 }
+  }
+}

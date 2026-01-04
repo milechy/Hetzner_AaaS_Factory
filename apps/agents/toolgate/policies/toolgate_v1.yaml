@@ -1,0 +1,72 @@
+version: toolgate_v1
+
+# deny if any touched path starts with these prefixes
+blockedWhen:
+  pathsPrefix:
+    - "infra/"
+    - "ops/"
+    - ".github/"
+    - "templates/"
+    - "security/"
+    - "billing/"
+
+tools:
+  # read-only
+  - tool: "read_repo"
+    effect: "read"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "schema_validate"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "proposal_validate"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "git_diff"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "ci_check"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "run_tests"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  # write tools (v1.2以降で条件付き解禁想定 / v1.0ではdeny運用推奨)
+  - tool: "create_branch"
+    effect: "write"
+    allowedWhen:
+      humanApproved: [true]
+      riskLevel: ["low"]
+      highRiskDetected: [false]
+      maxFilesTouched: 10
+
+  - tool: "create_pull_request"
+    effect: "write"
+    allowedWhen:
+      humanApproved: [true]
+      riskLevel: ["low"]
+      highRiskDetected: [false]
+      maxFilesTouched: 10
