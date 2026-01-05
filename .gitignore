@@ -8,3 +8,6 @@ pr_result.json
 
 # macOS
 .DS_Store
+
+# local helper scripts
+/tools/open_pr_only.py
