@@ -18,25 +18,27 @@ GPT Projects は正式なフォルダ機能を持たないため、
 (全 Factory の仕様を定義する唯一の真理)
 
 master/
-factory_master_v1.md
+factory_master_v3.md
 factory_automation_master_v1.md
 factory_templates_master_v1.md
-agent_roles_master_v1.md
+agent_roles_master_v3.md
 agent_specs_master_v1.md
 coding_guidelines_master_v1.md
 design_system_master_v1.md
 ui_kit_master_v1.md
 api_standards_master_v1.md
 data_modeling_master_v1.md
-cicd_master_v1.md
+cicd_master_v2.md
 infra_master_v1.md
 saas_structure_master_v1.md
+master__security_checklist_v3.md
+master__open_pr_contract_v1_2.md
 
 ※ GPT Projects にアップロードするときは  
 ファイル名の先頭に `master__` を付けるとさらに安定します。
 
 例：  
-`master__factory_master_v1.md`
+`master__factory_master_v3.md`
 
 ---
 
@@ -139,12 +141,29 @@ glossary.md
 
 ---
 
+# 🔐 v1.2 Open-PR Contract（SSOT）
+
+Pull Request の自動作成（Open PR）に関する **正式な SSOT 契約** は、
+以下のマスターファイルに切り出して定義されている。
+
+- **master__open_pr_contract_v1_2.md**
+
+本 Contract は、Agent / CLI / ToolGate / Human Approval / GitHub API の
+すべてに優先して適用される。
+
+README は概要のみを記載する（正本は SSOT）。主な要点：
+- **humanApproved=true** と **有効な Approval Token** がない限り write は実行しない
+- Token scope は repo/baseBranch/proposalHash に拘束し、**actorId 一致を強い必須条件**として扱う
+- GitHub API 401/403 は **Fail Safe** で扱い、常に PR 作成用の fallback URL を返す
+
+---
+
 # 📌 リネーム規則（重要）
 
 GPT Projects のファイルはフォルダとして扱えないため  
 **以下の命名ルールでアップロードしてください：**
 
-master__factory_master_v1.md
+master__factory_master_v3.md
 master__ui_kit_master_v1.md
 saas__1__requirements_v1.md
 saas__1__ui_spec_v1.md

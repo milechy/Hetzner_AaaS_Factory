@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# local artifacts / secrets
+approval_token.json
+pr_result.json
+
+# macOS
+.DS_Store
