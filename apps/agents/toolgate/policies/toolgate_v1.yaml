@@ -54,6 +54,22 @@ tools:
       riskLevel: ["low", "medium", "high"]
       highRiskDetected: [true, false]
 
+  # controlled git (v1.2 A-path)
+  - tool: "controlled_git_policy_check"
+    effect: "validate"
+    allowedWhen:
+      humanApproved: [true, false]
+      riskLevel: ["low", "medium", "high"]
+      highRiskDetected: [true, false]
+
+  - tool: "controlled_git_open_pr"
+    effect: "write"
+    allowedWhen:
+      humanApproved: [true]
+      riskLevel: ["low"]
+      highRiskDetected: [false]
+      maxFilesTouched: 10
+
   # write tools (v1.2以降で条件付き解禁想定 / v1.0ではdeny運用推奨)
   - tool: "create_branch"
     effect: "write"
