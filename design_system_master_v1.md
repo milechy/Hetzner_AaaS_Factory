@@ -1,6 +1,6 @@
 # design_system_master_v1.md  
 Design System – Master Specification (v1)  
-最終更新: 2025-11-14
+最終更新: 2026-01-05
 
 ---
 
@@ -161,6 +161,28 @@ elev5: 0 24px 48px rgba(0,0,0,.14)
 
 duration: fast:120ms, base:200ms, slow:320ms, modal:420ms
 easing: standard:cubic-bezier(.2,0,.2,1)
+
+# 🧩 4.5 Iconography（アイコン規約）
+
+## 4.5.1 基本ルール
+- 基準サイズ：**24px グリッド**（Web/SwiftUIともに同等の見え方になるよう正規化）
+- 推奨サイズ：`12, 16, 20, 24, 32, 40`
+- 線幅：1.5〜2px（同一プロダクト内で統一）
+- 角：2px ラウンド（過度な装飾は避ける）
+
+## 4.5.2 色と状態
+- アイコン色は **Semantic Tokens** のみで表現する（直書き禁止）
+  - 例：通常 `--ds-text-muted`、強調 `--ds-text-primary`、アクション `--ds-color-primary`
+- 状態（hover/active/disabled/selected）は UI Kit の state に従い、Token で切替
+
+## 4.5.3 デフォルトアイコンソース
+- Primary / Default：**pqoqubbw/icons**
+- 外部アイコンを追加する場合は、カテゴリ・線幅・角R・サイズ体系を本規約に揃えること
+
+# 🧭 4.6 External References（非SSOT・参照のみ）
+- **elevenlabs/ui**：AI SaaS の情報設計・密度・階層設計の参考（コンポーネント/色/値の流用は禁止）
+- **react-grab**：Builder/Editor 系の実験的インタラクションの参考（共通UI Kitに含めない）
+- **tigma**：設計支援ツール（ランタイムUIではないため SSOT 外）
 
 ---
 

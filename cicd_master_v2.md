@@ -1,6 +1,6 @@
-# cicd_master_v1.md
-AaaS Factory – CI/CD Standards Master (v1)  
-最終更新: 2025-11-14
+# cicd_master_v2.md
+AaaS Factory – CI/CD Standards Master (v2)  
+最終更新: 2025-12-01
 
 ---
 
@@ -16,6 +16,7 @@ AaaS Factory – CI/CD Standards Master (v1)
 - lint / formatting / migrations
 - Coolify / Docker deploy
 - テストポリシー
+- **Mobile E2E (mobile-mcp)**
 
 Factory の CICDAgent / InfraAgent は 100% この文書に従って動く。
 
@@ -23,26 +24,27 @@ Factory の CICDAgent / InfraAgent は 100% この文書に従って動く。
 
 # 🧩 0. 全体構成（Pipeline Overview）
 
-Developer / Agent
-↓ push
-GitHub Repository
-↓
-GitHub Actions (CI)
-├─ lint
-├─ type-check
-├─ test (API/Web/Swift)
-├─ build (Next.js / API / iOS)
-├─ docker build
-└─ deliver artifacts
-↓
-Coolify / Hetzner (CD)
-↓
-Deploy to Prod / Staging
+Developer / Agent  
+↓ push  
+GitHub Repository  
+↓  
+GitHub Actions (CI)  
+├─ lint  
+├─ type-check  
+├─ test (API/Web/Swift)  
+├─ build (Next.js / API / iOS)  
+├─ docker build  
+└─ deliver artifacts  
+↓  
+Coolify / Hetzner (CD)  
+↓  
+Deploy to Prod / Staging  
 
 ランナーは：
 
 - **Hetzner Runner** → Web + API ビルド  
 - **Mac Runner** → iOS ビルド（Fastlane）
+- **Mobile-MCP Runner** → E2E Mobileテスト専用
 
 ---
 
@@ -50,22 +52,23 @@ Deploy to Prod / Staging
 
 ## 1.1 workflow ファイル名
 
-.github/workflows/
-├─ ci_web.yml
-├─ ci_api.yml
-├─ ci_ios.yml
-├─ deploy_web.yml
-├─ deploy_api.yml
-├─ deploy_ios.yml
-└─ checks.yml
+.github/workflows/  
+├─ ci_web.yml  
+├─ ci_api.yml  
+├─ ci_ios.yml  
+├─ deploy_web.yml  
+├─ deploy_api.yml  
+├─ deploy_ios.yml  
+├─ checks.yml  
+└─ e2e_mobile.yml
 
 ## 1.2 workflow トリガー
 
-on:
-push:
-branches: [ main, develop ]
-pull_request:
-workflow_dispatch:
+on:  
+  push:  
+    branches: [ main, develop ]  
+  pull_request:  
+  workflow_dispatch:
 
 ## 1.3 Secrets の扱い（厳格）
 
@@ -128,8 +131,9 @@ jobs:
         with:
           name: web-dist
           path: .next
+```
 
-3.2 Build Rules
+## 3.2 Build Rules
 	•	npm ci を基本
 	•	Next.js は output: standalone
 	•	Tailwind CLI ビルドを必須
@@ -137,10 +141,11 @@ jobs:
 
 ⸻
 
-🟥 4. CI: API（FastAPI / Node）
+# 🟥 4. CI: API（FastAPI / Node）
 
-4.1 ci_api.yml
+## 4.1 ci_api.yml
 
+```yaml
 name: API CI
 
 on:
@@ -163,22 +168,24 @@ jobs:
       - run: pytest api/tests
 
       - run: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-API Additional Rules
+## API Additional Rules
 	•	OpenAPI に完全準拠
 	•	migration 実行前に dry-run
 	•	Prisma → npx prisma generate を実行
 
 ⸻
 
-🟫 5. CI: iOS（SwiftUI）
+# 🟫 5. CI: iOS（SwiftUI）
 
-5.1 Runner
+## 5.1 Runner
 	•	自宅Mac（24/365） or MacStadium
 	•	Xcode CLI tools 必須
 
-5.2 ci_ios.yml
+## 5.2 ci_ios.yml
 
+```yaml
 name: iOS CI
 
 on:
@@ -197,18 +204,20 @@ jobs:
 
       - name: Build App
         run: xcodebuild -scheme SaaSApp -destination 'platform=iOS Simulator,name=iPhone 15' build
+```
 
-iOS Build Rules
+## iOS Build Rules
 	•	Fastlane は deploy 時に実行
 	•	CI ではビルド通過が最低条件
 	•	Secrets は keychain に事前登録
 
 ⸻
 
-🟪 6. Docker Build（共通）
+# 🟦 6. Docker Build（共通）
 
 docker_build.yml（自動生成）
 
+```yaml
 name: Docker Build
 
 on:
@@ -225,16 +234,17 @@ jobs:
 
       - name: Push
         run: docker push ${{ env.IMAGE }}
-
+```
 
 ⸻
 
-🟦 7. CD: Coolify Deploy
+# 🟦 7. CD: Coolify Deploy
 
 CD は Coolify API を叩いてデプロイする。
 
 deploy_web.yml
 
+```yaml
 name: Deploy Web
 
 on:
@@ -250,53 +260,102 @@ jobs:
           curl -X POST \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_API_KEY }}" \
             https://coolify.{DOMAIN}/api/v1/deploy/web
+```
 
 deploy_api.yml も同様
 
 ⸻
 
-🟥 8. Caching Strategy（重要）
+# 🟧 8. Mobile E2E (mobile-mcp) 採用方針
+
+## 8.1 e2e_mobile.yml
+
+```yaml
+name: Mobile E2E
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  mobile-e2e:
+    runs-on: self-hosted-mobile-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MCP
+        run: ./scripts/setup-mcp.sh
+      - name: Run E2E Tests
+        run: ./scripts/run-mobile-e2e.sh
+```
+
+## 8.2 Mobile MCP 原則
+	•	E2E テストは物理端末 or MCP（Mobile Control Platform）で実行  
+	•	Agent 以外からの直接操作は禁止  
+	•	Secrets/証明書は MCP vault 管理  
+	•	テストログ/スクリーンショットは artifact としてアップロード
+	•	Mobile device への install/uninstall は workflow 経由のみ
+	•	Mobile device への外部アクセスは MCP 側で全監査/制限
+
+## 8.3 禁止事項
+	•	MCP/端末の手動操作
+	•	テスト証明書の漏洩
+	•	未承認 device の登録
+	•	Agent 以外による E2E workflow 実行
+
+⸻
+
+# 🟥 9. Caching Strategy（重要）
 
 Next.js / API / Swift でキャッシュ戦略は次：
 	•	Node modules → actions/setup-node の cache
 	•	Python venv → 無し（汚染回避）
 	•	Swift build → derived data を runner側で保持
 	•	Docker → layer cache 有効
+	•	Mobile MCP → テストデータ/スクリーンショットは毎回新規
 
 ⸻
 
-📘 9. Runner Standardization（統一仕様）
+# 📘 10. Runner Standardization（統一仕様）
 
-9.1 2種類の Runner を使用
+## 10.1 3種類の Runner を使用
 	1.	Hetzner Runner（Linux）
-	•	Node.js build
-	•	Python build
-	•	Docker
-	•	Deploy
+		•	Node.js build
+		•	Python build
+		•	Docker
+		•	Deploy
 	2.	Mac Runner（macOS）
-	•	Swift build
-	•	Fastlane deploy
-	•	iOS signing
+		•	Swift build
+		•	Fastlane deploy
+		•	iOS signing
+	3.	Mobile-MCP Runner（Android/iOS物理 or MCP）
+		•	E2E Test
+		•	Mobile device control
 
-9.2 ランナーの配置
+## 10.2 ランナーの配置
 
-/srv/runner/
- ├─ run.sh
- ├─ config.sh
+/srv/runner/  
+ ├─ run.sh  
+ ├─ config.sh  
  └─ _work/
 
 Mac側：
 
-~/actions-runner/
+~/actions-runner/  
  └─ run-ios.sh
 
-9.3 ランナー登録
+MCP側：
+
+/opt/mcp-runner/
+ └─ run-mcp.sh
+
+## 10.3 ランナー登録
 
 → CICDAgent のみ が登録可能（人間操作は最小）
 
 ⸻
 
-🧯 10. CI/CD における禁止事項
+# 🧯 11. CI/CD における禁止事項
 	•	workflow を手で編集（必ず CICDAgent 経由）
 	•	Secrets をログ出力
 	•	main 直接 push
@@ -305,25 +364,27 @@ Mac側：
 	•	deploy 前にテストをスキップ
 	•	仕様書（api_spec.yaml）とズレた API を build
 	•	iOS の署名ファイルを Git に保存
+	•	MCP/端末の手動操作
+	•	未承認 device の登録
 
 ⸻
 
-🔁 11. すべての SaaS がこの構造に従う（最重要）
+# 🔁 12. すべての SaaS がこの構造に従う（最重要）
 
-SaaS-1 も SaaS-99 も、
+SaaS-1 も SaaS-99 も、  
 CI/CD は完全同一構造で生成される。
 
 CICDAgent のアルゴリズム：
 	1.	saas_structure_master を読む
 	2.	coding_guidelines_master を読む
 	3.	cicd_master（本ファイル）を読む
-	4.	SaaS 情報から 6種類の workflows を自動生成
+	4.	SaaS 情報から 7種類の workflows を自動生成
 	5.	仕様変更があれば再生成
 	6.	TemplateAgent に昇格できる改善を提案
 
 ⸻
 
-🔮 12. 将来拡張（v2）
+# 🔮 13. 将来拡張（v3+）
 	•	Canary Deploy
 	•	Blue-Green Deploy
 	•	Preview環境自動生成（PRごと）
@@ -332,6 +393,7 @@ CICDAgent のアルゴリズム：
 	•	Sentry / Datadog 連携
 	•	Multi-region deploy
 	•	Infrastructure Drift Detection Agent
+	•	Mobile Device Farm連携
 
 ⸻
 
