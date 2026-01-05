@@ -45,7 +45,8 @@ Factory を **「実行可能だが破壊しない」** 状態へ移行する。
 - `policy_check` が reject → 必ず停止（Approval を出しても進めない）
 - Human が reject → 停止
 - `apply_proposal_patch` が patch conflict → 停止（再提案・再生成へ）
-- `open_pull_request` 失敗 → 停止（人間判断でリトライ）
+- `open_pull_request` 失敗 → **原則停止**（人間判断でリトライ）
+  - ただし **GitHub API 由来の 403（"Resource not accessible by personal access token" 等）** の場合は v1.2 では「停止」ではなく **フォールバック（PR 作成 URL を返す）** として扱い、Human が UI で PR を作成して前進できる。
 
 ---
 
@@ -136,6 +137,23 @@ v1.2 は CLI を正とする（UI は後回し可）。
 
 ---
 
+## 8.3 GitHub 認証（v1.2 の現実解）
+
+v1.2 は **完全自動 PR 作成**を要件にしない（安全性優先）。
+GitHub 認証は環境差・権限制約により API が 403 になることがあるため、次の優先順位とする。
+
+1) **GitHub App（推奨）**
+   - Contents: Read/Write
+   - Pull requests: Read/Write
+   - Metadata: Read
+   - 監査・ローテーションが容易で、PAT のコピー事故を回避できる。
+
+2) **PAT / Deploy key 等（フォールバック）**
+   - git push が可能であれば `prepare_branch/apply_proposal_patch` は成立する。
+   - PR 作成 API が通らない場合は `open_pull_request` は **PR 作成 URL** を返し、Human が UI で作成する。
+
+---
+
 ## 9. 監査ログ（最小）
 
 ControlledGitTools は JSONL（append-only）で記録：
@@ -145,6 +163,21 @@ ControlledGitTools は JSONL（append-only）で記録：
 - `BRANCH_PREPARED`（branch, sha）
 - `PATCH_APPLIED`（commit, appliedFiles, skippedFiles）
 - `PR_OPENED`（pr number/url）
+- `PR_OPEN_FALLBACK`（prCreateUrl, reason/status/message）
+
+## 9.1 open_pull_request のフォールバック仕様（v1.2）
+
+GitHub API による PR 作成が失敗する場合でも、v1.2 は **前進可能**であることを重視する。
+
+- 成功時: `PR_OPENED` を記録し、`prUrl` を返す。
+- 失敗時:
+  - HTTP 403 かつメッセージが `Resource not accessible by personal access token` 等の場合は、
+    Tool は **停止ではなくフォールバック**として次を返す：
+    - `prCreateUrl = https://github.com/{repo}/pull/new/{headBranch}?expand=1`
+    - 監査ログに `PR_OPEN_FALLBACK`（reason, status, message）を追記
+  - それ以外の失敗（422/409/ネットワーク等）は **停止**として扱い、Human 判断でリトライ。
+
+注: v1.2 は merge を行わず、PR 作成後の review/merge は Human に限定する。
 
 ---
 
