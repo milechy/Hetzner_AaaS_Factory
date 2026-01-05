@@ -1,5 +1,5 @@
-# Factory Master v2
-最終更新: 2025-12
+# Factory Master v3
+最終更新: 2026-01
 
 ## 0. 最上位決定（憲法）
 
@@ -38,7 +38,24 @@ Plan → Execute → Review → Reflect
 
 ---
 
-## 3. 禁止事項
+## 3. Tool 設計原則
+
+### 3.1 Tool は最小化する（Tool Minimization）
+
+Tools は最小限かつ単一責任であることが求められる。  
+監査可能であり、追加は必ず SSOT の更新を伴うこと。
+
+### 3.2 標準抽象を優先する（Standard Abstractions First）
+
+GitHub PR、CI チェック、ワークフロー、差分ベースの提案を優先する。
+
+### 3.3 万能 shell 実行ツールは禁止
+
+便利であっても汎用的な bash/OS 実行ツールの使用は禁止する。
+
+---
+
+## 4. 禁止事項
 
 - SSOT を bypass する自動更新
 - Agent による直接 push / merge

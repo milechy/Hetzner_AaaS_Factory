@@ -1,6 +1,6 @@
 # ui_kit_master_v1.md
 AaaS Factory – UI Kit Master Specification (v1)  
-最終更新: 2025-11-14
+最終更新: 2026-01-05
 
 ---
 
@@ -401,6 +401,44 @@ square-ui 自体に A11y ガイドはなく、shadcn/ui に準拠しているた
 - チャット（history + input box）  
 - カレンダー（週間・月間）  
 - Tasks / Kanban / Timeline（情報構造の参考）
+
+
+### 10.2 Icon Sources（アイコンソース）
+UI Kit のアイコンは Design System の Iconography ルールに従う。
+本プロジェクトのデフォルトアイコンソースは以下とする：
+- **pqoqubbw/icons**（Primary / Default）
+
+#### 10.2.1 利用ルール
+- SVG/ベクターは **24px グリッド**を基本とし、サイズは `12/16/20/24/32/40` のいずれかに正規化
+- 色は **Semantic Tokens**（例: `--ds-text-muted`, `--ds-text-primary`, `--ds-color-primary`）のみで表現し、直接指定は禁止
+- 状態（active/selected/disabled）は UI Kit 側の state に従い、色は Token で切替
+- 装飾目的のアイコン乱用は禁止（情報階層のノイズを増やさない）
+
+### 10.3 UX Reference Repos（UX参照用リポジトリ）
+以下は SSOT ではなく、**情報設計・画面密度・階層設計**の参考としてのみ利用する。
+- **elevenlabs/ui**（AI SaaS の入力→処理→出力の体験設計、密度/階層の参考）
+
+#### 10.3.1 利用ルール
+- コンポーネント API / class / 色 / spacing の直接流用は禁止
+- 参照は **Pattern レベル（画面構造・導線）**に限定
+- 反映する場合は、必ず UI Kit の Patterns にマッピングしてから採用
+
+### 10.4 Interaction Utilities（実験的UX補助）
+以下は共通 UI Kit には含めない（標準化すると一貫性を損なう可能性があるため）。
+- **react-grab**（ドラッグ/掴み感のある操作の補助。Builder/Editor 系SaaSに限定）
+
+#### 10.4.1 採用条件
+- CRUD中心の一般SaaSでは原則不採用
+- キーボード操作/フォーカス/タッチ操作を阻害しないこと（A11y優先）
+- 採用する場合は SaaS 固有 UI として扱い、テンプレ昇格は原則禁止
+
+### 10.5 Design Tooling（設計支援ツール）
+以下は UI Kit/Design System の一部ではない（ランタイムUIではないため）。
+- **tigma**（設計/抽出/検証の補助ツール群）
+
+#### 10.5.1 利用ルール
+- UI/UX成果物や UI Kit の SSOT を置き換えない
+- 参照は設計プロセス上の補助に限定
 
 ⸻
 
