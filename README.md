@@ -28,7 +28,7 @@ design_system_master_v1.md
 ui_kit_master_v1.md
 api_standards_master_v1.md
 data_modeling_master_v1.md
-cicd_master_v1.md
+cicd_master_v2.md
 infra_master_v1.md
 saas_structure_master_v1.md
 

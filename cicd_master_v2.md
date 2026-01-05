@@ -1,4 +1,4 @@
-# cicd_master_v1.md
+# cicd_master_v2.md
 AaaS Factory – CI/CD Standards Master (v1)  
 最終更新: 2025-11-14
 
