@@ -18,10 +18,10 @@ GPT Projects は正式なフォルダ機能を持たないため、
 (全 Factory の仕様を定義する唯一の真理)
 
 master/
-factory_master_v1.md
+factory_master_v3.md
 factory_automation_master_v1.md
 factory_templates_master_v1.md
-agent_roles_master_v1.md
+agent_roles_master_v3.md
 agent_specs_master_v1.md
 coding_guidelines_master_v1.md
 design_system_master_v1.md
@@ -36,7 +36,7 @@ saas_structure_master_v1.md
 ファイル名の先頭に `master__` を付けるとさらに安定します。
 
 例：  
-`master__factory_master_v1.md`
+`master__factory_master_v3.md`
 
 ---
 
@@ -144,7 +144,7 @@ glossary.md
 GPT Projects のファイルはフォルダとして扱えないため  
 **以下の命名ルールでアップロードしてください：**
 
-master__factory_master_v1.md
+master__factory_master_v3.md
 master__ui_kit_master_v1.md
 saas__1__requirements_v1.md
 saas__1__ui_spec_v1.md
