@@ -63,3 +63,11 @@ jobs:
             f.write(body)
             f.write("\nEOF\n")
           PY
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "${{ github.ref_name }} – Open-PR Contract"
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: false
