@@ -5,6 +5,13 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.5] - 2026-01-06
+
+### Changed
+- Verify restored release workflow
+
+---
+
 ## [v1.3.2] - 2026-01-06
 
 ### Changed
