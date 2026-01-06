@@ -1,14 +1,14 @@
-## [v1.3.1] - 2026-01-06
-
-### Changed
-- Test release automation: GitHub Release body is generated from CHANGELOG.md section
-
-
-
 # Changelog
 
 All notable changes to this project are documented in this file.
 This project follows a contract-first approach for controlled Git operations.
+
+---
+
+## [v1.3.1] - 2026-01-06
+
+### Changed
+- Test release automation: GitHub Release body is generated from CHANGELOG.md section
 
 ---
 
