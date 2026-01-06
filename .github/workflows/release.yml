@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"  # e.g. v1.3.0
+          python - <<'PY'
+          import os, re, sys, pathlib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          changelog = pathlib.Path("CHANGELOG.md")
+          if not changelog.exists():
+            print("CHANGELOG.md not found", file=sys.stderr)
+            sys.exit(1)
+
+          text = changelog.read_text(encoding="utf-8")
+
+          # Find section header: ## [v1.3.0] - 2026-01-05
+          pat = re.compile(rf"^##\s+\[{re.escape(tag)}\]\s+-\s+.+$", re.M)
+          m = pat.search(text)
+          if not m:
+            print(f"Release section for {tag} not found in CHANGELOG.md", file=sys.stderr)
+            sys.exit(1)
+
+          start = m.start()
+          # End at next "## [" header or EOF
+          m2 = re.search(r"^##\s+\[v\d+\.\d+\.\d+\]\s+-\s+.+$", text[m.end():], re.M)
+          end = (m.end() + m2.start()) if m2 else len(text)
+          body = text[start:end].strip()
+
+          # Append SSOT reference (fixed for v1.3 contract line; safe even for future tags)
+          ssot = "master__open_pr_contract_v1_3.md"
+          body += "\n\n---\n\n### SSOT\n- " + ssot + "\n"
+          # Write to GitHub output
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as f:
+            f.write("body<<EOF\n")
+            f.write(body)
+            f.write("\nEOF\n")
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "${{ github.ref_name }} – Open-PR Contract"
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: false
