@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.3.6)"
+        required: true
+        type: string
+      create_tag:
+        description: "Create and push the tag if it does not exist (workflow_dispatch only)"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -17,17 +28,57 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build release notes from CHANGELOG
-        id: notes
+      - name: Resolve tag
+        id: tag
         shell: bash
         run: |
           set -euo pipefail
 
-          TAG="${GITHUB_REF_NAME}"  # e.g. v1.3.0
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG_INPUT="${{ inputs.tag }}"
+            if [[ -z "${TAG_INPUT}" ]]; then
+              echo "inputs.tag is required" >&2
+              exit 1
+            fi
+            TAG="${TAG_INPUT}"
+          else
+            TAG="${GITHUB_REF_NAME}"  # e.g. v1.3.0
+          fi
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure tag exists (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.create_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          git fetch --tags origin
+
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists; skipping creation."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "${TAG} – release"
+          git push origin "${TAG}"
+
+      - name: Build release notes from CHANGELOG
+        id: notes
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
           python - <<'PY'
           import os, re, sys, pathlib
 
-          tag = os.environ["GITHUB_REF_NAME"]
+          tag = os.environ["RELEASE_TAG"]
           changelog = pathlib.Path("CHANGELOG.md")
           if not changelog.exists():
             print("CHANGELOG.md not found", file=sys.stderr)
@@ -35,39 +86,34 @@ jobs:
 
           text = changelog.read_text(encoding="utf-8")
 
-          # Find section header: ## [v1.3.0] - 2026-01-05
           pat = re.compile(rf"^##\s+\[{re.escape(tag)}\]\s+-\s+.+$", re.M)
           m = pat.search(text)
           if not m:
             print(f"Release section for {tag} not found in CHANGELOG.md", file=sys.stderr)
             sys.exit(1)
 
-          # End at next "## [vX.Y.Z]" header or EOF
           m2 = re.search(r"^##\s+\[v\d+\.\d+\.\d+\]\s+-\s+.+$", text[m.end():], re.M)
           end = (m.end() + m2.start()) if m2 else len(text)
 
           body = text[m.start():end].strip()
-
-          # Remove trailing separators if they exist (avoid "---\n\n---" duplication)
           body = re.sub(r"\n---\s*\Z", "", body).rstrip()
 
-          # Append SSOT reference (fixed for v1.3 contract line)
           ssot = "master__open_pr_contract_v1_3.md"
           if "### SSOT" not in body:
             body += "\n\n---\n\n### SSOT\n- " + ssot + "\n"
 
-          # Write to GitHub output
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a", encoding="utf-8") as f:
             f.write("body<<EOF\n")
             f.write(body)
             f.write("\nEOF\n")
           PY
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "${{ github.ref_name }} – Open-PR Contract"
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "${{ steps.tag.outputs.tag }} – Open-PR Contract"
           body: ${{ steps.notes.outputs.body }}
           draft: false
           prerelease: false
