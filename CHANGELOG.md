@@ -5,6 +5,14 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.7] - 2026-01-06
+
+### Changed
+- Skip the GitHub Actions release workflow on bot-triggered tag pushes (prevents loops/duplicate runs).
+- Stabilize the fully automated release flow by ensuring the release job runs only for human-created tags.
+
+---
+
 ## [v1.3.6] - 2026-01-06
 
 ### Changed
