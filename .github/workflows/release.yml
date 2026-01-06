@@ -42,15 +42,20 @@ jobs:
             print(f"Release section for {tag} not found in CHANGELOG.md", file=sys.stderr)
             sys.exit(1)
 
-          start = m.start()
-          # End at next "## [" header or EOF
+          # End at next "## [vX.Y.Z]" header or EOF
           m2 = re.search(r"^##\s+\[v\d+\.\d+\.\d+\]\s+-\s+.+$", text[m.end():], re.M)
           end = (m.end() + m2.start()) if m2 else len(text)
-          body = text[start:end].strip()
 
-          # Append SSOT reference (fixed for v1.3 contract line; safe even for future tags)
+          body = text[m.start():end].strip()
+
+          # Remove trailing separators if they exist (avoid "---\n\n---" duplication)
+          body = re.sub(r"\n---\s*\Z", "", body).rstrip()
+
+          # Append SSOT reference (fixed for v1.3 contract line)
           ssot = "master__open_pr_contract_v1_3.md"
-          body += "\n\n---\n\n### SSOT\n- " + ssot + "\n"
+          if "### SSOT" not in body:
+            body += "\n\n---\n\n### SSOT\n- " + ssot + "\n"
+
           # Write to GitHub output
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a", encoding="utf-8") as f:
@@ -58,12 +63,3 @@ jobs:
             f.write(body)
             f.write("\nEOF\n")
           PY
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "${{ github.ref_name }} – Open-PR Contract"
-          body: ${{ steps.notes.outputs.body }}
-          draft: false
-          prerelease: false
