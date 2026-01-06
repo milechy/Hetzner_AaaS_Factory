@@ -5,6 +5,13 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.2] - 2026-01-06
+
+### Changed
+- Deduplicate release note separators and SSOT section generation
+
+---
+
 ## [v1.3.1] - 2026-01-06
 
 ### Changed
