@@ -1,3 +1,8 @@
+## [v1.3.1] - 2026-01-06
+
+### Changed
+- Test release automation: GitHub Release body is generated from CHANGELOG.md section
+
 
 
 # Changelog
