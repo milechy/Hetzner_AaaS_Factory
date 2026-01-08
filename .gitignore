@@ -11,3 +11,6 @@ pr_result.json
 
 # local helper scripts
 /tools/open_pr_only.py
+
+# Local evidence packs (do not commit)
+SelfDev_Evidence_*.zip
