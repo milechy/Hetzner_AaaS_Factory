@@ -5,6 +5,21 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.8] - 2026-01-08
+
+### Changed
+- Align documentation with evidence-based current state of the Factory.
+- Clarify that the Factory is a fully automated Release Factory, while parallel AaaS development is not yet implemented.
+- Formalize the semi-automated Factory self-development protocol (Task Brief → VS Code / Copilot → PR → Human Gate) in documentation.
+- Remove any ambiguity between implemented capabilities and design-only future features.
+
+### Docs
+- Update README.md to reflect authoritative current operational status.
+- Update Factory master documents to clearly separate decision and execution layers.
+- Normalize Factory Automation Master v10 to match actual implementation status.
+
+---
+
 ## [v1.3.7] - 2026-01-06
 
 ### Changed
