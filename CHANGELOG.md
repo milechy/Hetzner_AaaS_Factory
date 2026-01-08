@@ -5,6 +5,21 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.9] - 2026-01-08
+
+### Added
+- Repo-level fail-fast lock for OpenPR execution (`refs/heads/__factory_lock__/open_pr`)
+- Minimal PR scheduler to prevent concurrent Factory PR creation on the same base branch (fail-fast, no wait/retry)
+
+### Changed
+- Integrate PR scheduler check before RepoLock acquisition in `open_pr_cli.py`
+
+### Tests
+- Add unit tests for PR scheduler blocking and fail-safe behavior
+- Add/extend unit tests for RepoLock acquire/release behavior
+
+---
+
 ## [v1.3.8] - 2026-01-08
 
 ### Changed
