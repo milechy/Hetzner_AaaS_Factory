@@ -6,6 +6,23 @@ AaaS Factory – GPT Project File Structure (v1.3.7)
 「マスターファイル（唯一の真理）」を整理し、  
 GPT が役割ごとに正確に参照できるように構造化しています。
 
+## 🧭 Current Factory Status (Authoritative)
+
+- Latest Release: v1.3.7  
+- Release Automation: Implemented and running (tag-push, fail-fast)  
+- Parallel AaaS Development: Not implemented  
+- Self-Dev / Parallel Orchestration: Design-only  
+
+This README documents *current operational reality only.*  
+Future capabilities are defined in master__*.md and are not assumed implemented.
+
+## 🛠 Factory Development Protocol (Current)
+
+The current protocol for Factory self-development is:  
+Task Brief → VS Code Agent / GitHub Copilot Agent Mode → PR → Human Approval  
+
+This protocol applies strictly to Factory self-development and does not apply to AaaS generation.
+
 # 🚀 Release Automation (Current)
 フロー概要：
 1. **main** ブランチで CHANGELOG.md に次バージョンのセクションを追加して commit

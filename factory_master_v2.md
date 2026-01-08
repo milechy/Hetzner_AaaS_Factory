@@ -1,4 +1,4 @@
-# Factory Master v2
+# Factory Master v3
 最終更新: 2025-12
 
 ## 0. 最上位決定（憲法）
@@ -35,6 +35,12 @@ Factory は以下のループで動作する：
 Plan → Execute → Review → Reflect
 
 各フェーズは Agent SDK 上の Agent と Tool により実現される。
+
+### Decision / Execution Separation
+
+- Decision Layer: Human + GPT Project (Factory Self-Dev / PM)
+- Execution Layer: VS Code Agent mode / GitHub Copilot Agent mode
+- 実行ツールは独自に意思決定を行ってはならず、PR-firstルールをバイパスしてはならない。
 
 ---
 
