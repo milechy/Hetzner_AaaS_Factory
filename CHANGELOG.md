@@ -5,6 +5,37 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.3.9] - 2026-01-08
+
+### Added
+- **Repo-level fail-fast lock for OpenPR execution**
+  - Introduced `RepoLock` using a dedicated GitHub ref (`refs/heads/__factory_lock__/open_pr`)
+  - Prevents concurrent OpenPR execution (branch creation + PR creation) within the same repository
+  - Fail-fast semantics: no wait, retry, or backoff on lock contention
+  - Guaranteed lock release via `try/finally` on both success and failure paths
+
+- **Factory PR Scheduler (minimal guardrail)**
+  - Blocks new Factory PR creation when another Factory PR is already open on the same base branch
+  - Detects existing Factory PRs by branch naming convention
+  - Returns explicit, machine-readable exit codes instead of raising on API errors
+  - Designed as a minimal safeguard (no queueing, no concurrency orchestration)
+
+### Changed
+- Integrate RepoLock and PR Scheduler into `open_pr_cli.py` execution flow
+  - Scheduler check is executed before lock acquisition
+  - Lock acquisition is enforced before any write-side Git operations
+
+### Tests
+- Added unit tests for RepoLock acquire/release behavior (success, conflict, error cases)
+- Added unit tests for PR Scheduler blocking and fail-safe behavior
+
+### Notes
+- This release introduces **minimal guardrails only**
+- Job queues, retries, TTL-based recovery, and runner separation remain explicitly out of scope
+- Serves as the first executable foundation for Factory semi-automated self-development
+
+---
+
 ## [v1.3.8] - 2026-01-08
 
 ### Changed
