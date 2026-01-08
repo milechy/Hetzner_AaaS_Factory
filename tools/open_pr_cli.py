@@ -3,8 +3,8 @@ import os, json, base64, uuid
 import requests
 import hmac, hashlib
 from datetime import datetime, timezone
-from pr_scheduler import assert_no_open_factory_pr, PRScheduleBlocked
-from repo_lock import RepoLock, RepoLockError
+from tools.pr_scheduler import assert_no_open_factory_pr, PRScheduleBlocked
+from tools.repo_lock import RepoLock, RepoLockError
 
 def stable_json(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
@@ -76,7 +76,8 @@ def main():
     # Check for open factory PRs and acquire lock
     try:
         assert_no_open_factory_pr(repo=repo, base_branch=base, api_base=api, gh_token=gh_token)
-    except PRScheduleBlocked:
+    except PRScheduleBlocked as e:
+        print(f"[PRSchedule] blocked {e}")
         raise SystemExit(2)
     
     lock = RepoLock(repo=repo, api_base=api, gh_token=gh_token)

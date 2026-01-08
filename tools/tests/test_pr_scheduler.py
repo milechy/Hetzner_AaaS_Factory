@@ -3,7 +3,7 @@ Unit tests for pr_scheduler module.
 """
 import unittest
 from unittest.mock import Mock, patch
-from pr_scheduler import assert_no_open_factory_pr, PRScheduleBlocked
+from tools.pr_scheduler import assert_no_open_factory_pr, PRScheduleBlocked
 
 
 class TestPRScheduler(unittest.TestCase):
@@ -14,7 +14,7 @@ class TestPRScheduler(unittest.TestCase):
         self.api_base = "https://api.github.com"
         self.gh_token = "test_token"
         
-    @patch('pr_scheduler.requests.get')
+    @patch('tools.pr_scheduler.requests.get')
     def test_no_open_prs(self, mock_get):
         """Test when there are no open PRs at all."""
         mock_response = Mock()
@@ -36,7 +36,7 @@ class TestPRScheduler(unittest.TestCase):
         self.assertEqual(kwargs['params']['state'], 'open')
         self.assertEqual(kwargs['params']['per_page'], 100)
         
-    @patch('pr_scheduler.requests.get')
+    @patch('tools.pr_scheduler.requests.get')
     def test_no_matching_factory_prs(self, mock_get):
         """Test when there are open PRs but none are factory PRs on the base branch."""
         mock_response = Mock()
@@ -63,7 +63,7 @@ class TestPRScheduler(unittest.TestCase):
             gh_token=self.gh_token
         )
         
-    @patch('pr_scheduler.requests.get')
+    @patch('tools.pr_scheduler.requests.get')
     def test_factory_pr_exists_on_same_base(self, mock_get):
         """Test when a factory PR exists on the same base branch."""
         mock_response = Mock()
@@ -91,7 +91,7 @@ class TestPRScheduler(unittest.TestCase):
         self.assertIn("count=1", error_msg)
         self.assertIn("https://github.com/owner/repo/pull/100", error_msg)
         
-    @patch('pr_scheduler.requests.get')
+    @patch('tools.pr_scheduler.requests.get')
     def test_multiple_factory_prs_on_same_base(self, mock_get):
         """Test when multiple factory PRs exist on the same base branch."""
         mock_response = Mock()
@@ -128,7 +128,7 @@ class TestPRScheduler(unittest.TestCase):
         self.assertIn("count=2", error_msg)
         self.assertIn("https://github.com/owner/repo/pull/100", error_msg)
         
-    @patch('pr_scheduler.requests.get')
+    @patch('tools.pr_scheduler.requests.get')
     def test_pr_without_html_url(self, mock_get):
         """Test when PR doesn't have html_url but has url field."""
         mock_response = Mock()
@@ -153,21 +153,33 @@ class TestPRScheduler(unittest.TestCase):
         error_msg = str(context.exception)
         self.assertIn("https://api.github.com/repos/owner/repo/pulls/200", error_msg)
         
-    @patch('pr_scheduler.requests.get')
-    def test_api_error(self, mock_get):
-        """Test when GitHub API returns an error."""
+    @patch('tools.pr_scheduler.requests.get')
+    def test_api_error_non_200(self, mock_get):
+        """Test when GitHub API returns non-200 status (Fail-Safe: should not raise)."""
         mock_response = Mock()
-        mock_response.status_code = 500
-        mock_response.raise_for_status = Mock(side_effect=Exception("API Error"))
+        mock_response.status_code = 403
         mock_get.return_value = mock_response
         
-        with self.assertRaises(Exception):
-            assert_no_open_factory_pr(
-                repo=self.repo,
-                base_branch=self.base_branch,
-                api_base=self.api_base,
-                gh_token=self.gh_token
-            )
+        # Should NOT raise - fail-safe behavior
+        assert_no_open_factory_pr(
+            repo=self.repo,
+            base_branch=self.base_branch,
+            api_base=self.api_base,
+            gh_token=self.gh_token
+        )
+        
+    @patch('tools.pr_scheduler.requests.get')
+    def test_api_exception(self, mock_get):
+        """Test when GitHub API request raises exception (Fail-Safe: should not raise)."""
+        mock_get.side_effect = Exception("Network error")
+        
+        # Should NOT raise - fail-safe behavior
+        assert_no_open_factory_pr(
+            repo=self.repo,
+            base_branch=self.base_branch,
+            api_base=self.api_base,
+            gh_token=self.gh_token
+        )
 
 
 if __name__ == '__main__':
