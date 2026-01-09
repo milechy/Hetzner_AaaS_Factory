@@ -5,6 +5,21 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.4.0] - 2026-01-08
+
+### Added
+- Minimal PR scheduling guardrail to prevent concurrent Factory PR creation on the same base branch.
+  - Blocks when an existing open `proposal/*` PR targets the same base branch (exit code 2).
+  - Fail-safe policy: on GitHub API errors, logs a warning and proceeds.
+
+### Changed
+- Run PR scheduler check before any write operations in `open_pr_cli.py`.
+
+### Tests
+- Add unit tests for PR scheduler blocking and fail-safe behavior.
+
+---
+
 ## [v1.3.10] - 2026-01-08
 
 ### Added
