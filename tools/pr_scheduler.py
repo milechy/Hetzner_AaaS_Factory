@@ -45,13 +45,17 @@ def assert_no_open_factory_pr(
         
         # Fail-Safe: if API returns non-200, log warning and return
         if r.status_code != 200:
-            print(f"[PRSchedule] warning: skip check status={r.status_code}")
+            print(
+                f"[PRSchedule] warn reason=github_api_non_200 repo={repo} base={base_branch} status={r.status_code}"
+            )
             return
         
         prs = r.json()
     except Exception as e:
         # Fail-Safe: on any exception, log warning and return
-        print(f"[PRSchedule] warning: skip check exception={type(e).__name__}")
+        print(
+            f"[PRSchedule] warn reason=github_api_exception repo={repo} base={base_branch} exc={type(e).__name__}"
+        )
         return
     
     # Filter for factory PRs: head ref starts with "proposal/" and base matches
@@ -65,5 +69,7 @@ def assert_no_open_factory_pr(
         first_pr = factory_prs[0]
         first_url = first_pr.get("html_url") or first_pr.get("url", "unknown")
         msg = f"PR_ALREADY_OPEN count={count} base={base_branch} first={first_url}"
-        print(f"[PRSchedule] blocked reason=existing_open_factory_pr count={count} base={base_branch} first={first_url}")
+        print(
+            f"[PRSchedule] blocked reason=existing_open_factory_pr repo={repo} base={base_branch} count={count} first={first_url}"
+        )
         raise PRScheduleBlocked(msg)

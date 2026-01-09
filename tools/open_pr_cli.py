@@ -75,8 +75,8 @@ def main():
     # Check for open factory PRs BEFORE any write operations
     try:
         assert_no_open_factory_pr(repo=repo, base_branch=base, api_base=api, gh_token=gh_token)
-    except PRScheduleBlocked as e:
-        print(f"[PRSchedule] blocked {e}")
+    except PRScheduleBlocked:
+        print("[PRSchedule] exit=2 blocked")
         raise SystemExit(2)
 
     # create new ref

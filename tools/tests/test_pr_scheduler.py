@@ -63,8 +63,9 @@ class TestPRScheduler(unittest.TestCase):
             gh_token=self.gh_token
         )
         
+    @patch('builtins.print')
     @patch('tools.pr_scheduler.requests.get')
-    def test_factory_pr_exists_on_same_base(self, mock_get):
+    def test_factory_pr_exists_on_same_base(self, mock_get, mock_print):
         """Test when a factory PR exists on the same base branch."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -91,9 +92,13 @@ class TestPRScheduler(unittest.TestCase):
         self.assertIn("count=1", error_msg)
         self.assertIn("base=main", error_msg)
         self.assertIn("https://github.com/owner/repo/pull/100", error_msg)
+        mock_print.assert_any_call(
+            "[PRSchedule] blocked reason=existing_open_factory_pr repo=owner/repo base=main count=1 first=https://github.com/owner/repo/pull/100"
+        )
         
+    @patch('builtins.print')
     @patch('tools.pr_scheduler.requests.get')
-    def test_multiple_factory_prs_on_same_base(self, mock_get):
+    def test_multiple_factory_prs_on_same_base(self, mock_get, mock_print):
         """Test when multiple factory PRs exist on the same base branch."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -129,9 +134,13 @@ class TestPRScheduler(unittest.TestCase):
         self.assertIn("count=2", error_msg)
         self.assertIn("base=main", error_msg)
         self.assertIn("https://github.com/owner/repo/pull/100", error_msg)
+        mock_print.assert_any_call(
+            "[PRSchedule] blocked reason=existing_open_factory_pr repo=owner/repo base=main count=2 first=https://github.com/owner/repo/pull/100"
+        )
         
+    @patch('builtins.print')
     @patch('tools.pr_scheduler.requests.get')
-    def test_api_error_non_200(self, mock_get):
+    def test_api_error_non_200(self, mock_get, mock_print):
         """Test when GitHub API returns non-200 status (Fail-Safe: should not raise)."""
         mock_response = Mock()
         mock_response.status_code = 403
@@ -144,9 +153,13 @@ class TestPRScheduler(unittest.TestCase):
             api_base=self.api_base,
             gh_token=self.gh_token
         )
+        mock_print.assert_any_call(
+            "[PRSchedule] warn reason=github_api_non_200 repo=owner/repo base=main status=403"
+        )
         
+    @patch('builtins.print')
     @patch('tools.pr_scheduler.requests.get')
-    def test_api_error_500(self, mock_get):
+    def test_api_error_500(self, mock_get, mock_print):
         """Test when GitHub API returns 500 status (Fail-Safe: should not raise)."""
         mock_response = Mock()
         mock_response.status_code = 500
@@ -159,9 +172,13 @@ class TestPRScheduler(unittest.TestCase):
             api_base=self.api_base,
             gh_token=self.gh_token
         )
+        mock_print.assert_any_call(
+            "[PRSchedule] warn reason=github_api_non_200 repo=owner/repo base=main status=500"
+        )
         
+    @patch('builtins.print')
     @patch('tools.pr_scheduler.requests.get')
-    def test_api_exception(self, mock_get):
+    def test_api_exception(self, mock_get, mock_print):
         """Test when GitHub API request raises exception (Fail-Safe: should not raise)."""
         mock_get.side_effect = Exception("Network error")
         
@@ -171,6 +188,9 @@ class TestPRScheduler(unittest.TestCase):
             base_branch=self.base_branch,
             api_base=self.api_base,
             gh_token=self.gh_token
+        )
+        mock_print.assert_any_call(
+            "[PRSchedule] warn reason=github_api_exception repo=owner/repo base=main exc=Exception"
         )
 
 
