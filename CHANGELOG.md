@@ -5,6 +5,23 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.4.1] - 2026-01-09
+
+### Changed
+- Stabilize PRSchedule logging format to single-line key=value output.
+  - Non-200 GitHub API responses now log:
+    `[PRSchedule] warn reason=github_api_non_200 repo=<repo> base=<base> status=<code>`
+  - Exceptions now log:
+    `[PRSchedule] warn reason=github_api_exception repo=<repo> base=<base> exc=<ExceptionClass>`
+  - Blocking condition now logs:
+    `[PRSchedule] blocked reason=existing_open_factory_pr repo=<repo> base=<base> count=<N> first=<url>`
+
+### Tests
+- Strengthen PR scheduler tests to assert exact log output using `@patch('builtins.print')`.
+- Preserve all existing behavioral guarantees (no logic changes).
+
+---
+
 ## [v1.4.0] - 2026-01-08
 
 ### Added
