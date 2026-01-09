@@ -3,6 +3,7 @@ import os, json, base64, uuid
 import requests
 import hmac, hashlib
 from datetime import datetime, timezone
+from tools.pr_scheduler import assert_no_open_factory_pr, PRScheduleBlocked
 
 def stable_json(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
@@ -70,6 +71,13 @@ def main():
     r = requests.get(ref_url, headers=gh_headers(gh_token), timeout=30)
     r.raise_for_status()
     base_sha = r.json()["object"]["sha"]
+
+    # Check for open factory PRs BEFORE any write operations
+    try:
+        assert_no_open_factory_pr(repo=repo, base_branch=base, api_base=api, gh_token=gh_token)
+    except PRScheduleBlocked as e:
+        print(f"[PRSchedule] blocked {e}")
+        raise SystemExit(2)
 
     # create new ref
     create_ref_url = f"{api}/repos/{repo}/git/refs"
