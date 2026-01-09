@@ -309,3 +309,5 @@ GPT が確実にフォルダ（prefix）を理解します。
 ---
 
 # END
+
+(smoketest) trigger changelog PR generator
