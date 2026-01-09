@@ -1,0 +1,57 @@
+name: Auto-merge CHANGELOG PR (after approval)
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch: {}
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  enable-automerge:
+    # Guardrails:
+    # - Only run after an APPROVED review
+    # - Only for PRs targeting main
+    # - Only for release/*-changelog branches
+    if: >-
+      github.event_name == 'pull_request_review' &&
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'release/') &&
+      endsWith(github.event.pull_request.head.ref, '-changelog')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (for diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard: only CHANGELOG.md changed
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            changelog_only:
+              - 'CHANGELOG.md'
+            non_changelog:
+              - '**'
+              - '!CHANGELOG.md'
+
+      - name: Skip if non-CHANGELOG files are included
+        if: steps.changes.outputs.non_changelog == 'true'
+        run: |
+          echo "skip: PR includes non-CHANGELOG changes; do not enable auto-merge"
+          exit 0
+
+      - name: Enable auto-merge (squash)
+        if: steps.changes.outputs.changelog_only == 'true' && steps.changes.outputs.non_changelog != 'true'
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: squash
+          pull-request-number: ${{ github.event.pull_request.number }}
