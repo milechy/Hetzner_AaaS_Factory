@@ -5,6 +5,15 @@ This project follows a contract-first approach for controlled Git operations.
 
 ---
 
+## [v1.4.2] - 2026-01-09
+
+### Fixed
+- Stabilize PRSchedule runtime logs to machine-parseable single-line key=value format.
+- Standardize scheduler blocked handling in open_pr_cli to emit: `[PRSchedule] exit=2 blocked`.
+- Strengthen unit tests to assert exact PRSchedule log output (no behavior changes).
+
+---
+
 ## [v1.4.1] - 2026-01-09
 
 ### Changed
