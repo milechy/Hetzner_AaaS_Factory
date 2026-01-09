@@ -3,6 +3,58 @@
 All notable changes to this project are documented in this file.
 This project follows a contract-first approach for controlled Git operations.
 
+⸻
+
+[v1.4.3] - 2026-01-09
+
+Added
+	•	RepoLock を OpenPR の write operations 境界として正式導入
+	•	open_pr_cli.py のすべての write-side GitHub API 操作（branch 作成 / commit / PR 作成）を
+Repo-level fail-fast lock で明示的に保護。
+	•	Lock ref: refs/heads/__factory_lock__/open_pr
+	•	Lock acquire は PRScheduler 通過後、最初の write 操作直前に実行。
+	•	Lock release は finally ブロックで必ず実行（成功・失敗・例外時を含む）。
+
+Changed
+	•	PRScheduler と RepoLock の責務境界を明確化
+	•	PRScheduler: 論理的競合（既存 Factory PR の有無） の検出のみを担当。
+	•	RepoLock: 物理的競合（同時 write operations） の防止を担当。
+	•	両者の順序を以下に固定：
+	1.	Approval / Contract validation
+	2.	PRScheduler check（read-only）
+	3.	RepoLock acquire
+	4.	Write operations
+	5.	RepoLock release
+
+Logging
+	•	RepoLock のログを machine-parseable な key=value 形式に統一：
+	•	Acquire success:
+[RepoLock] acquire ok repo=<repo> ref=<ref>
+	•	Acquire conflict (422):
+[RepoLock] acquire fail reason=already_locked repo=<repo> ref=<ref> status=422
+	•	Release success:
+[RepoLock] release ok repo=<repo> ref=<ref>
+	•	Release not found (404):
+[RepoLock] release warn reason=not_found (may have been manually deleted)
+	•	Release API error:
+[RepoLock] release fail reason=github_api_error repo=<repo> ref=<ref> status=<code>
+
+Tests
+	•	RepoLock の acquire / release 挙動に対する unit tests を追加。
+	•	422 / 404 / その他 API エラー時の fail-fast / warn / error 動作を明示的に検証。
+	•	PRScheduler / RepoLock の両方が独立してテスト可能な構造を維持。
+
+Behavior Guarantees
+	•	NO retry / NO wait policy は維持（fail-fast のみ）。
+	•	GitHub API エラー時の fail-safe / warn-only セマンティクスは変更なし。
+	•	既存の OpenPR contract / exit code 規約に非互換変更なし。
+
+⸻
+
+補足（運用メモ・非記載）
+	•	このリリースは 設計整理＋安全性強化のみで、外部挙動は意図的に不変。
+	•	v1.4.x 系の「競合防止モデル」はこの時点で完成形。
+
 ---
 
 ## [v1.4.2] - 2026-01-09
