@@ -1,0 +1,139 @@
+name: Create CHANGELOG PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  changelog-pr:
+    # Run only when a non-changelog PR is merged into main.
+    # Prevents recursion when the auto-generated changelog PR itself is merged.
+    if: |
+      github.event.pull_request.merged == true &&
+      !startsWith(github.event.pull_request.head.ref, 'release/') &&
+      github.event.pull_request.title != '' &&
+      !startsWith(github.event.pull_request.title, 'docs(changelog):')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next patch version from latest tag
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          latest="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "$latest" ]]; then
+            latest="v0.0.0"
+          fi
+
+          # Expect vMAJOR.MINOR.PATCH
+          v="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$v"
+          patch=$((patch+1))
+          next="v${major}.${minor}.${patch}"
+
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Update CHANGELOG.md (insert new section)
+        shell: bash
+        env:
+          VER: ${{ steps.ver.outputs.next }}
+          MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os, re
+          from datetime import datetime, timezone
+
+          ver = os.environ["VER"]
+
+          # Use UTC date (YYYY-MM-DD). Prefer merged_at when available; otherwise fall back to now.
+          merged_at = os.environ.get("MERGED_AT", "")
+          if merged_at:
+            try:
+              dt = datetime.fromisoformat(merged_at.replace("Z", "+00:00"))
+              date = dt.astimezone(timezone.utc).date().isoformat()
+            except Exception:
+              date = datetime.now(timezone.utc).date().isoformat()
+          else:
+            date = datetime.now(timezone.utc).date().isoformat()
+
+          pr_title = os.environ["PR_TITLE"]
+          pr_number = os.environ["PR_NUMBER"]
+          pr_url = os.environ["PR_URL"]
+
+          path = "CHANGELOG.md"
+          with open(path, "r", encoding="utf-8") as f:
+            txt = f.read()
+
+          # Guard: if section already exists, do nothing
+          if f"## [{ver}]" in txt:
+            print("CHANGELOG already contains section:", ver)
+            raise SystemExit(0)
+
+          section = f"""## [{ver}] - {date}
+
+          ### Changed
+          - {pr_title} (#{pr_number})
+            - {pr_url}
+
+          ---
+
+          """
+
+          # Insert right after the first '---' divider (after header)
+          m = re.search(r"\n---\n\n", txt)
+          if not m:
+            raise SystemExit("CHANGELOG.md missing header divider ('---').")
+
+          insert_at = m.end()
+          new_txt = txt[:insert_at] + section + txt[insert_at:]
+
+          with open(path, "w", encoding="utf-8") as f:
+            f.write(new_txt)
+          print("Inserted CHANGELOG section:", ver)
+          PY
+
+      - name: Create Pull Request (release/<ver>-changelog)
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: release/${{ steps.ver.outputs.next }}-changelog
+          title: "docs(changelog): add ${{ steps.ver.outputs.next }} release notes"
+          commit-message: "docs(changelog): add ${{ steps.ver.outputs.next }} release notes"
+          body: |
+            Auto-generated CHANGELOG PR for ${{ steps.ver.outputs.next }}.
+            - Source PR: #${{ github.event.pull_request.number }}
+            - Latest tag: ${{ steps.ver.outputs.latest }}
+          add-paths: |
+            CHANGELOG.md
+
+      - name: Enable auto-merge (requires approval if protected)
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Enabling auto-merge for PR #$pr"
+          gh pr merge "$pr" --auto --squash
