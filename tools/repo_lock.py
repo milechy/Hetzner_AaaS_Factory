@@ -12,7 +12,40 @@ Fail-fast:
 
 from __future__ import annotations
 
-import requests
+# requests is preferred, but tests and minimal runtimes must work without it.
+try:
+    import requests  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    import json as _json
+    import urllib.error as _urlerr
+    import urllib.request as _urlreq
+
+    class _Resp:
+        def __init__(self, status_code: int, body: bytes):
+            self.status_code = status_code
+            self._body = body
+
+    def _request(method: str, url: str, *, headers=None, json=None, timeout=30):
+        hdrs = dict(headers or {})
+        data = None
+        if json is not None:
+            data = _json.dumps(json).encode("utf-8")
+            hdrs.setdefault("Content-Type", "application/json")
+        req = _urlreq.Request(url, data=data, headers=hdrs, method=method)
+        try:
+            with _urlreq.urlopen(req, timeout=timeout) as resp:
+                return _Resp(int(resp.getcode()), resp.read())
+        except _urlerr.HTTPError as e:
+            return _Resp(int(e.code), e.read())
+
+    class requests:  # noqa: N801
+        @staticmethod
+        def post(url, json=None, headers=None, timeout=30):
+            return _request("POST", url, headers=headers, json=json, timeout=timeout)
+
+        @staticmethod
+        def delete(url, headers=None, timeout=30):
+            return _request("DELETE", url, headers=headers, timeout=timeout)
 
 
 class RepoLockError(Exception):
