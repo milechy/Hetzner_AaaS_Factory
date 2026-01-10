@@ -156,7 +156,7 @@ def main() -> None:
     try:
         assert_no_open_factory_pr(repo=repo, base_branch=base, api_base=api, gh_token=gh_token)
     except PRScheduleBlocked:
-        print("[PRSchedule] exit=2 blocked")
+        print(f"[PRSchedule] exit=2 blocked repo={repo} base={base}")
         raise SystemExit(2)
 
     # RepoLock gate: any write operations must be executed under lock
@@ -164,7 +164,7 @@ def main() -> None:
     try:
         lock.acquire(sha=base_sha)
     except RepoLockError:
-        print("[RepoLock] exit=3 locked")
+        print(f"[RepoLock] exit=3 locked repo={repo} ref={lock.lock_ref}")
         raise SystemExit(3)
 
     try:
@@ -229,7 +229,7 @@ def main() -> None:
         try:
             lock.release()
         except RepoLockError:
-            print("[RepoLock] release warn reason=release_failed")
+            print(f"[RepoLock] release warn reason=release_failed repo={repo} ref={lock.lock_ref}")
 
 
 if __name__ == "__main__":
