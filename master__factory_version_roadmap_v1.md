@@ -20,8 +20,11 @@ This roadmap is binding for:
 
 ## 1. Definitions
 
-### Launch-Ready Factory (Target)
+### SSOT (Single Source of Truth)
+This file is the **authoritative and binding** roadmap.
+Any conflicting plan, note, or instruction is **invalid** unless it is merged into this file via PR.
 
+### Launch-Ready Factory (Target)
 A Factory is considered **launch-ready** when:
 
 - Release Factory (tag → automated release) is stable
@@ -45,12 +48,15 @@ for launch readiness.
   - Fail-Fast CI/CD
   - Open-PR + Human Gate enforced
 
-### Not Implemented
+### Not Implemented (as capabilities)
 - Work Queue / Concurrency orchestration
 - ContextPackage (AaaS-level isolation)
 - PR scheduling / review blocking
 - Runner separation (Hetzner / Mac)
 - Self-Dev autonomous loops (L4)
+
+> Note: “Not Implemented” means “not present as a supported, production-usable capability”.
+> Experiments are prohibited unless explicitly Allowed in the version plan below.
 
 ---
 
@@ -71,7 +77,6 @@ Not Allowed:
 ---
 
 ### v1.3.9 — RepoLock (Minimal Safety Guard)
-
 Goal:
 Prevent concurrent modifications to the same repository.
 
@@ -92,7 +97,6 @@ Exit Criteria:
 ---
 
 ### v1.4.0 — PR Scheduling (Minimal)
-
 Goal:
 Ensure unreviewed PRs block subsequent automation.
 
@@ -103,7 +107,7 @@ Allowed:
 
 Not Allowed:
 - Priority queues
-- Automatic PR merging
+- Automatic PR merging (except the explicit changelog-only flow, if defined elsewhere)
 - Multi-agent arbitration
 
 Exit Criteria:
@@ -112,7 +116,6 @@ Exit Criteria:
 ---
 
 ### v1.5.0 — Work Queue (Factory-Level, Minimal)
-
 Goal:
 Serialize Factory work without parallel execution hazards.
 
@@ -132,7 +135,6 @@ Exit Criteria:
 ---
 
 ### v1.6.0 — ContextPackage (Design + Skeleton Only)
-
 Goal:
 Prepare for future parallel AaaS development without enabling it.
 
