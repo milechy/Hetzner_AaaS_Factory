@@ -119,7 +119,9 @@ class RepoLock:
             return
 
         if r.status_code == 404:
-            print("[RepoLock] release warn reason=not_found (may have been manually deleted)")
+            print(
+                f"[RepoLock] release warn reason=not_found repo={self.repo} ref={self.lock_ref} (may have been manually deleted)"
+            )
             return
 
         print(

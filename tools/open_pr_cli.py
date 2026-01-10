@@ -181,6 +181,7 @@ def main() -> None:
 
         r = requests.get(content_url, headers=gh_headers(gh_token), params={"ref": branch_name}, timeout=30)
         if r.status_code == 404:
+            print(f"[OpenPR] exit=1 reason=target_not_found repo={repo} path={target_path} head={branch_name}")
             raise SystemExit("docs/README.md not found in repo (expected for this demo). Adjust target_path.")
         r.raise_for_status()
 
@@ -223,7 +224,7 @@ def main() -> None:
             timeout=30,
         )
 
-        print("PR created:", pr["html_url"])
+        print(f"[OpenPR] created repo={repo} base={base} head={branch_name} url={pr['html_url']}")
 
     finally:
         try:
