@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Guard: only CHANGELOG.md changed
+      - name: "Guard: only CHANGELOG.md changed"
         id: changes
         uses: dorny/paths-filter@v3
         with:
