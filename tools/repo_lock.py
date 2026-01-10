@@ -1,127 +1,224 @@
-"""tools.repo_lock
+"""RepoLock
 
-RepoLock - Fail-fast distributed lock for OpenPR execution on the same repo.
+Fail-fast distributed lock for OpenPR execution on the same repo.
 
-Lock strategy:
-- Acquire: create a Git ref (lock branch) in the target repo
-- Release: delete the lock ref
+Implementation:
+- Lock is represented as a Git ref under:
+    refs/heads/__factory_lock__/open_pr/<epoch_seconds>
+- Acquire is fail-fast when an active lock exists.
+- Optional TTL: expired locks are reaped (deleted) before acquiring.
 
-Fail-fast:
-- If lock exists (422), raise RepoLockError (caller should exit immediately)
+This module is intentionally dependency-light. If `requests` is not installed,
+we still expose a `requests` symbol so unit tests can patch it; runtime calls
+will raise a clear error.
 """
 
 from __future__ import annotations
 
-# requests is preferred, but tests and minimal runtimes must work without it.
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+
+class _RequestsShim:
+    """Fallback shim when `requests` is not installed.
+
+    Unit tests patch `tools.repo_lock.requests.<method>`; this shim preserves the
+    attribute surface so patching works.
+    """
+
+    def _missing(self) -> None:
+        raise ModuleNotFoundError("requests is required to use RepoLock at runtime")
+
+    def get(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+        self._missing()
+
+    def post(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+        self._missing()
+
+    def delete(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
+        self._missing()
+
+
 try:
-    import requests  # type: ignore
+    import requests as _requests  # type: ignore
+
+    requests = _requests
 except ModuleNotFoundError:  # pragma: no cover
-    import json as _json
-    import urllib.error as _urlerr
-    import urllib.request as _urlreq
-
-    class _Resp:
-        def __init__(self, status_code: int, body: bytes):
-            self.status_code = status_code
-            self._body = body
-
-    def _request(method: str, url: str, *, headers=None, json=None, timeout=30):
-        hdrs = dict(headers or {})
-        data = None
-        if json is not None:
-            data = _json.dumps(json).encode("utf-8")
-            hdrs.setdefault("Content-Type", "application/json")
-        req = _urlreq.Request(url, data=data, headers=hdrs, method=method)
-        try:
-            with _urlreq.urlopen(req, timeout=timeout) as resp:
-                return _Resp(int(resp.getcode()), resp.read())
-        except _urlerr.HTTPError as e:
-            return _Resp(int(e.code), e.read())
-
-    class requests:  # noqa: N801
-        @staticmethod
-        def post(url, json=None, headers=None, timeout=30):
-            return _request("POST", url, headers=headers, json=json, timeout=timeout)
-
-        @staticmethod
-        def delete(url, headers=None, timeout=30):
-            return _request("DELETE", url, headers=headers, timeout=timeout)
+    requests = _RequestsShim()  # type: ignore
 
 
 class RepoLockError(Exception):
-    pass
+    """Raised when RepoLock cannot be acquired or released safely."""
 
 
+@dataclass
 class RepoLock:
-    def __init__(
-        self,
-        repo: str,
-        api_base: str,
-        gh_token: str,
-        lock_ref: str = "refs/heads/__factory_lock__/open_pr",
-        timeout: int = 30,
-    ) -> None:
-        self.repo = repo
-        self.api_base = api_base.rstrip("/")
-        self.gh_token = gh_token
-        self.lock_ref = lock_ref
-        self.timeout = timeout
+    repo: str
+    api_base: str
+    gh_token: str
+    ttl_seconds: int = 0
 
-    def _headers(self) -> dict:
+    # Set after acquire
+    lock_ref: Optional[str] = None
+
+    @property
+    def lock_prefix(self) -> str:
+        # Logical namespace; stored as refs/heads/... in GitHub.
+        return "refs/heads/__factory_lock__/open_pr"
+
+    def _headers(self) -> Dict[str, str]:
         return {
             "Authorization": f"Bearer {self.gh_token}",
             "Accept": "application/vnd.github+json",
         }
 
-    def acquire(self, sha: str) -> None:
-        """Acquire lock by creating lock ref pointing to sha.
+    def _matching_refs_url(self) -> str:
+        # GitHub API expects the path without the leading "refs/".
+        # matching-refs supports prefixes such as "heads/<prefix>".
+        return f"{self.api_base}/repos/{self.repo}/git/matching-refs/heads/__factory_lock__/open_pr"
 
-        Success: 201/200
-        Already exists: 422 -> RepoLockError (fail-fast)
-        Other errors: RepoLockError
-        """
-        url = f"{self.api_base}/repos/{self.repo}/git/refs"
-        payload = {"ref": self.lock_ref, "sha": sha}
+    def _delete_ref_url(self, full_ref: str) -> str:
+        # DELETE expects e.g. heads/__factory_lock__/open_pr/1234
+        ref_path = full_ref
+        if ref_path.startswith("refs/"):
+            ref_path = ref_path[len("refs/") :]
+        return f"{self.api_base}/repos/{self.repo}/git/refs/{ref_path}"
 
-        r = requests.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
+    def _create_ref_url(self) -> str:
+        return f"{self.api_base}/repos/{self.repo}/git/refs"
 
-        if r.status_code in (200, 201):
-            print(f"[RepoLock] acquire ok repo={self.repo} ref={self.lock_ref}")
+    def _parse_epoch_from_ref(self, ref: str) -> Optional[int]:
+        # Expect refs/heads/__factory_lock__/open_pr/<epoch>
+        parts = ref.split("/")
+        if not parts:
+            return None
+        try:
+            return int(parts[-1])
+        except Exception:
+            return None
+
+    def _list_existing_locks(self) -> List[str]:
+        r = requests.get(self._matching_refs_url(), headers=self._headers(), timeout=30)
+        if r.status_code != 200:
+            raise RepoLockError(f"REPO_LOCK_LIST_FAILED status={r.status_code}")
+
+        data = r.json()
+        if not isinstance(data, list):
+            return []
+        refs: List[str] = []
+        for item in data:
+            if isinstance(item, dict) and isinstance(item.get("ref"), str):
+                refs.append(item["ref"])
+        return refs
+
+    def _reap_expired_locks(self, now: int, refs: List[str]) -> None:
+        # TTL disabled => do not reap.
+        if self.ttl_seconds <= 0:
             return
 
-        if r.status_code == 422:
+        for ref in refs:
+            epoch = self._parse_epoch_from_ref(ref)
+            if epoch is None:
+                # Unknown format: treat as active (do not delete).
+                continue
+            age = now - epoch
+            if age <= self.ttl_seconds:
+                continue
+
+            # Expired: attempt delete. Any non-204/404 is a hard failure.
+            dr = requests.delete(self._delete_ref_url(ref), headers=self._headers(), timeout=30)
+            if dr.status_code in (204, 404):
+                continue
+
             print(
-                f"[RepoLock] acquire fail reason=already_locked repo={self.repo} ref={self.lock_ref} status=422"
+                f"[RepoLock] reap fail reason=github_api_error repo={self.repo} ref={ref} status={dr.status_code}"
+            )
+            raise RepoLockError(f"REPO_LOCK_REAP_FAILED status={dr.status_code}")
+
+    def _has_active_lock(self, now: int, refs: List[str]) -> bool:
+        # TTL disabled => any lock blocks.
+        if self.ttl_seconds <= 0:
+            return len(refs) > 0
+
+        for ref in refs:
+            epoch = self._parse_epoch_from_ref(ref)
+            if epoch is None:
+                # Unknown format: consider active.
+                return True
+            if (now - epoch) <= self.ttl_seconds:
+                return True
+        return False
+
+    def acquire(self, sha: str, *, max_retries: int = 2) -> None:
+        """Acquire the repo lock.
+
+        Behavior:
+        - List existing locks
+        - Reap expired locks (if TTL enabled)
+        - If any active lock exists, raise RepoLockError (fail-fast)
+        - Create a new lock ref. If 422 collision, retry up to max_retries.
+        """
+
+        now = int(time.time())
+
+        refs = self._list_existing_locks()
+        self._reap_expired_locks(now, refs)
+
+        # Re-list after reaping to avoid race/stale view.
+        refs = self._list_existing_locks()
+        if self._has_active_lock(now, refs):
+            # Prefer a stable ref for logging (first found).
+            first = refs[0] if refs else self.lock_prefix
+            print(
+                f"[RepoLock] acquire fail reason=already_locked repo={self.repo} ref={first} status=422"
             )
             raise RepoLockError("REPO_LOCKED")
 
-        print(
-            f"[RepoLock] acquire fail reason=github_api_error repo={self.repo} ref={self.lock_ref} status={r.status_code}"
-        )
-        raise RepoLockError(f"REPO_LOCK_ACQUIRE_FAILED status={r.status_code}")
+        last_exc: Optional[RepoLockError] = None
+        for _ in range(max_retries):
+            ref = f"{self.lock_prefix}/{int(time.time())}"
+            payload = {"ref": ref, "sha": sha}
+            r = requests.post(
+                self._create_ref_url(), json=payload, headers=self._headers(), timeout=30
+            )
+
+            if r.status_code == 201:
+                self.lock_ref = ref
+                print(f"[RepoLock] acquire ok repo={self.repo} ref={self.lock_ref}")
+                return
+
+            if r.status_code == 422:
+                # Collision (another actor created a lock ref). Re-check locks.
+                last_exc = RepoLockError("REPO_LOCK_COLLISION")
+                continue
+
+            print(
+                f"[RepoLock] acquire fail reason=github_api_error repo={self.repo} ref={ref} status={r.status_code}"
+            )
+            raise RepoLockError(f"REPO_LOCK_ACQUIRE_FAILED status={r.status_code}")
+
+        # Retries exhausted
+        raise last_exc or RepoLockError("REPO_LOCK_COLLISION")
 
     def release(self) -> None:
-        """Release lock by deleting lock ref.
+        """Release the repo lock (best-effort for missing lock)."""
 
-        Success: 204
-        Not found: 404 -> warn only (do not fail)
-        Other errors: RepoLockError
-        """
-        ref_path = self.lock_ref
-        if ref_path.startswith("refs/"):
-            ref_path = ref_path[len("refs/") :]
+        if not self.lock_ref:
+            return
 
-        url = f"{self.api_base}/repos/{self.repo}/git/refs/{ref_path}"
-        r = requests.delete(url, headers=self._headers(), timeout=self.timeout)
+        r = requests.delete(self._delete_ref_url(self.lock_ref), headers=self._headers(), timeout=30)
 
         if r.status_code == 204:
             print(f"[RepoLock] release ok repo={self.repo} ref={self.lock_ref}")
+            self.lock_ref = None
             return
 
         if r.status_code == 404:
             print(
                 f"[RepoLock] release warn reason=not_found repo={self.repo} ref={self.lock_ref} (may have been manually deleted)"
             )
+            self.lock_ref = None
             return
 
         print(
