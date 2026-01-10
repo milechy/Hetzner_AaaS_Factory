@@ -126,14 +126,3 @@ jobs:
             - Latest tag: ${{ steps.ver.outputs.latest }}
           add-paths: |
             CHANGELOG.md
-
-      - name: Enable auto-merge (requires approval if protected)
-        if: steps.cpr.outputs.pull-request-number != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pr="${{ steps.cpr.outputs.pull-request-number }}"
-          echo "Enabling auto-merge for PR #$pr"
-          gh pr merge "$pr" --auto --squash
