@@ -1,0 +1,170 @@
+# Factory Version Roadmap v1
+# SSOT – Authoritative, Binding, Evidence-Based
+
+## 0. Purpose
+
+This document defines the **only allowed development path** for the AaaS Factory
+until it is considered **launch-ready**.
+
+Anything not explicitly listed as "Allowed" for a given version:
+- MUST NOT be implemented
+- MUST NOT be proposed
+- MUST NOT be discussed beyond design notes
+
+This roadmap is binding for:
+- Humans
+- GPT Projects
+- VS Code Agent / GitHub Copilot Agent mode
+
+---
+
+## 1. Definitions
+
+### Launch-Ready Factory (Target)
+
+A Factory is considered **launch-ready** when:
+
+- Release Factory (tag → automated release) is stable
+- Factory itself can be developed **semi-automatically**:
+  - Task Brief → VS Code / Copilot → PR → Human Gate
+- Minimum safety guards prevent concurrent corruption:
+  - Repo-level locking
+  - PR scheduling / review blocking
+
+Parallel AaaS development and full Self-Dev autonomy are **explicitly out of scope**
+for launch readiness.
+
+---
+
+## 2. Current State (Evidence-Based)
+
+### Achieved
+- v1.3.7
+  - Fully automated Release Factory (L2)
+  - CHANGELOG as sole release truth
+  - Fail-Fast CI/CD
+  - Open-PR + Human Gate enforced
+
+### Not Implemented
+- Work Queue / Concurrency orchestration
+- ContextPackage (AaaS-level isolation)
+- PR scheduling / review blocking
+- Runner separation (Hetzner / Mac)
+- Self-Dev autonomous loops (L4)
+
+---
+
+## 3. Version-by-Version Roadmap (Binding)
+
+### v1.3.8 — Documentation & State Alignment
+Status: COMPLETE
+
+Allowed:
+- SSOT alignment
+- README clarification
+- Automation master normalization
+
+Not Allowed:
+- Any functional changes
+- Any concurrency features
+
+---
+
+### v1.3.9 — RepoLock (Minimal Safety Guard)
+
+Goal:
+Prevent concurrent modifications to the same repository.
+
+Allowed:
+- Repo-level lock mechanism (file / label / branch / metadata based)
+- Lock acquisition & release via PR lifecycle
+- Lock state visibility (logs / labels)
+
+Not Allowed:
+- Work Queue
+- Multi-repo orchestration
+- Parallel AaaS development
+- ContextPackage
+
+Exit Criteria:
+- Two simultaneous PR attempts cannot modify the same repo state
+
+---
+
+### v1.4.0 — PR Scheduling (Minimal)
+
+Goal:
+Ensure unreviewed PRs block subsequent automation.
+
+Allowed:
+- PR state inspection
+- Automation pause when review is pending
+- Single-active-PR policy per repo
+
+Not Allowed:
+- Priority queues
+- Automatic PR merging
+- Multi-agent arbitration
+
+Exit Criteria:
+- Factory automation halts safely when PR awaits human review
+
+---
+
+### v1.5.0 — Work Queue (Factory-Level, Minimal)
+
+Goal:
+Serialize Factory work without parallel execution hazards.
+
+Allowed:
+- Single global work queue
+- FIFO execution
+- Explicit human-triggered enqueue
+
+Not Allowed:
+- Parallel execution
+- Dynamic scaling
+- AaaS-level queues
+
+Exit Criteria:
+- No two Factory jobs run concurrently
+
+---
+
+### v1.6.0 — ContextPackage (Design + Skeleton Only)
+
+Goal:
+Prepare for future parallel AaaS development without enabling it.
+
+Allowed:
+- ContextPackage specification
+- Interfaces and data contracts
+- No execution wiring
+
+Not Allowed:
+- Runtime isolation
+- Concurrent execution
+- Multi-AaaS runs
+
+Exit Criteria:
+- ContextPackage defined but unused
+
+---
+
+## 4. Explicitly Forbidden Until v2.x
+
+- Parallel AaaS development
+- Multi-repo concurrent execution
+- Autonomous Self-Dev loops
+- Agent-to-agent arbitration
+- Memory layers spanning multiple runs
+
+---
+
+## 5. Change Policy
+
+- This file may only be changed via PR
+- Any change requires explicit human approval
+- CHANGELOG entry is mandatory for version boundary changes
+
+# END
