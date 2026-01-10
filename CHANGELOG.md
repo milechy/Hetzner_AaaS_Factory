@@ -218,3 +218,4 @@ Behavior Guarantees
 - Initial Open-PR Contract with human approval gating.
 - ToolGate-based permission checks for controlled Git operations.
 - (smoketest) changelog automerge
+<--exclude smoketest 2026-01-10-06:45:39 -->
