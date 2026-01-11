@@ -169,4 +169,18 @@ Exit Criteria:
 - Any change requires explicit human approval
 - CHANGELOG entry is mandatory for version boundary changes
 
+---
+
+## 6. RepoLock TTL (Operational Default)
+- Recommended ttl_seconds: 3600 (1 hour)
+- Expired lock refs (now-epoch > ttl) may be reaped on acquire.
+- Non-epoch refs are treated as active (do not reap).
+
+#### Manual unlock (emergency)
+List locks:
+  gh api repos/:owner/:repo/git/matching-refs/heads/__factory_lock__/open_pr --jq '.[].ref'
+
+Delete a lock ref:
+  gh api -X DELETE repos/:owner/:repo/git/refs/heads/__factory_lock__/open_pr/<epoch>
+
 # END
