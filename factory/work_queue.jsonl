@@ -4,3 +4,4 @@
 {"eventId":"evt_1768106692_8872","ts":"2026-01-11T04:44:52Z","actor":"milechy","type":"enqueue","jobId":"job_1768106692_9216","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest2","body":"head-only check"}}}
 {"eventId":"evt_1768106764_acb3","ts":"2026-01-11T04:46:04Z","actor":"milechy","type":"done","jobId":"job_1768100234_448a","reason":"smoketest complete"}
 {"eventId":"evt_1768107087_e65e","ts":"2026-01-11T04:51:27Z","actor":"milechy","type":"start","jobId":"job_1768106692_9216"}
+{"eventId":"evt_1768107094_3043","ts":"2026-01-11T04:51:34Z","actor":"milechy","type":"done","jobId":"job_1768106692_9216","reason":"head-only check complete"}
