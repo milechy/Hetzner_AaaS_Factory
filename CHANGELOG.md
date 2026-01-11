@@ -70,6 +70,14 @@ Behavior Guarantees
 
 ---
 
+## [v1.5.2] - 2026-01-11
+
+### Changed
+- feat(queue): Work Queue SSOT IO (enqueue-ssot) v1.5.2 (#43)
+  - https://github.com/milechy/Hetzner_AaaS_Factory/pull/43
+
+---
+
 ## [v1.5.1] - 2026-01-11
 
 ### Changed
