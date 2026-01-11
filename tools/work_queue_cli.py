@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from typing import Any, Dict
 
@@ -17,6 +18,8 @@ from tools.work_queue import (
 )
 
 DEFAULT_QUEUE_PATH = "factory/work_queue.jsonl"
+DEFAULT_SSOT_BRANCH = "__factory_state__/work_queue"
+DEFAULT_REMOTE = "origin"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -35,6 +38,19 @@ def _parse_args() -> argparse.Namespace:
         help="JSON object string (must be a dict). Example: '{\"title\":\"...\"}'",
     )
 
+    ssot = sub.add_parser("enqueue-ssot", help="Append an enqueue event to the SSOT branch (human only).")
+    ssot.add_argument("--ssot-branch", default=DEFAULT_SSOT_BRANCH)
+    ssot.add_argument("--remote", default=DEFAULT_REMOTE)
+    ssot.add_argument("--actor", default=os.getenv("GITHUB_ACTOR", ""), help="Human actor (required).")
+    ssot.add_argument("--kind", required=True, choices=["open_pr", "release", "changelog", "maintenance"])
+    ssot.add_argument("--repo", required=True, help="owner/name")
+    ssot.add_argument("--base", required=True, help="base branch, e.g. main")
+    ssot.add_argument(
+        "--payload-json",
+        required=True,
+        help="JSON object string (must be a dict). Example: '{\"title\":\"...\"}'",
+    )
+
     return p.parse_args()
 
 
@@ -46,6 +62,33 @@ def _load_payload(payload_json: str) -> Dict[str, Any]:
     if not isinstance(obj, dict):
         raise SchemaError("payload_json_must_be_object")
     return obj
+
+
+def _git(args: list[str]) -> str:
+    r = subprocess.run(["git", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if r.returncode != 0:
+        raise WorkQueueError(f"git_failed args={' '.join(args)} stderr={r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+def _current_branch() -> str:
+    # Returns current branch name; if detached, returns 'HEAD'
+    return _git(["rev-parse", "--abbrev-ref", "HEAD"]) or "HEAD"
+
+
+def _switch_back(branch: str) -> None:
+    if branch == "HEAD":
+        subprocess.run(["git", "switch", "-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    subprocess.run(["git", "switch", branch], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _ensure_queue_init(path: str) -> None:
+    if os.path.exists(path):
+        return
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('{"type":"__init__","note":"SSOT file placeholder; events start below"}\n')
 
 
 def main() -> None:
@@ -79,11 +122,68 @@ def main() -> None:
             print(f"[WorkQueue] exit=4 reason=invariant_or_schema detail={e}", file=sys.stderr)
             raise SystemExit(4)
         except WorkQueueError as e:
+            msg = str(e)
+            if "git_failed" in msg:
+                print(f"[WorkQueue] exit=4 reason=git_error detail={msg}", file=sys.stderr)
+                raise SystemExit(4)
             print(f"[WorkQueue] exit=4 reason=work_queue_error detail={e}", file=sys.stderr)
             raise SystemExit(4)
 
         print(
             f"[WorkQueue] enqueue ok jobId={ev['jobId']} eventId={ev['eventId']} repo={ev['job']['repo']} base={ev['job']['base']}"
+        )
+        return
+
+    if args.cmd == "enqueue-ssot":
+        actor = (args.actor or "").strip()
+        if not actor:
+            print("[WorkQueue] exit=4 reason=missing_actor", file=sys.stderr)
+            raise SystemExit(4)
+
+        if actor == BOT_ACTOR:
+            print("[WorkQueue] exit=4 reason=human_only actor=github-actions[bot]", file=sys.stderr)
+            raise SystemExit(4)
+
+        payload = _load_payload(args.payload_json)
+
+        orig = _current_branch()
+        try:
+            _git(["fetch", args.remote, args.ssot_branch])
+            _git(["switch", "-C", "__wq__/ssot", "FETCH_HEAD"])  # local scratch branch
+
+            _ensure_queue_init(DEFAULT_QUEUE_PATH)
+
+            ev = enqueue(
+                queue_path=DEFAULT_QUEUE_PATH,
+                actor=actor,
+                job_kind=args.kind,
+                repo=args.repo,
+                base=args.base,
+                payload=payload,
+            )
+
+            _git(["add", DEFAULT_QUEUE_PATH])
+            _git(["commit", "-m", f"chore(queue): enqueue {ev['jobId']}"])
+            _git(["push", args.remote, f"HEAD:{args.ssot_branch}"])
+
+        except HumanOnlyViolation as e:
+            print(f"[WorkQueue] exit=4 reason=human_only detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except (SchemaError, InvariantViolation) as e:
+            print(f"[WorkQueue] exit=4 reason=invariant_or_schema detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except WorkQueueError as e:
+            msg = str(e)
+            if "git_failed" in msg:
+                print(f"[WorkQueue] exit=4 reason=git_error detail={msg}", file=sys.stderr)
+                raise SystemExit(4)
+            print(f"[WorkQueue] exit=4 reason=work_queue_error detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        finally:
+            _switch_back(orig)
+
+        print(
+            f"[WorkQueue] enqueue ok jobId={ev['jobId']} eventId={ev['eventId']} repo={ev['job']['repo']} base={ev['job']['base']} ssot_branch={args.ssot_branch}"
         )
         return
 
