@@ -1,7 +1,15 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
-This project follows a contract-first approach for controlled Git operations.
+This project follows a contract-first approach for 
+controlled Git operations.
+
+⸻
+
+## [v1.5.2] - 2026-01-11
+
+### Added
+- Work Queue SSOT IO: `enqueue-ssot` writes queue events to `__factory_state__/work_queue:factory/work_queue.jsonl` via git fetch/switch/commit/push.
 
 ⸻
 
