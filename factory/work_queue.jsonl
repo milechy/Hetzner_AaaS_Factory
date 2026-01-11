@@ -1,3 +1,4 @@
 {"type":"__init__","note":"SSOT file placeholder; events start below"}
 {"eventId":"evt_1768100234_cbb3","ts":"2026-01-11T02:57:14Z","actor":"milechy","type":"enqueue","jobId":"job_1768100234_448a","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest","body":"ssot io"}}}
 {"eventId":"evt_1768106571_97df","ts":"2026-01-11T04:42:51Z","actor":"milechy","type":"start","jobId":"job_1768100234_448a"}
+{"eventId":"evt_1768106692_8872","ts":"2026-01-11T04:44:52Z","actor":"milechy","type":"enqueue","jobId":"job_1768106692_9216","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest2","body":"head-only check"}}}
