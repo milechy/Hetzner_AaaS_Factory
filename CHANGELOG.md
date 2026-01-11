@@ -78,6 +78,14 @@ Behavior Guarantees
 
 ---
 
+## [v1.5.3] - 2026-01-11
+
+### Changed
+- feat(queue): Work Queue SSOT transition (v1.5.3) (#45)
+  - https://github.com/milechy/Hetzner_AaaS_Factory/pull/45
+
+---
+
 ## [v1.5.2] - 2026-01-11
 
 ### Changed
