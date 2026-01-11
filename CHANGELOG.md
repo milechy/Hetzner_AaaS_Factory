@@ -5,6 +5,19 @@ This project follows a contract-first approach for controlled Git operations.
 
 ⸻
 
+## [v1.5.0] - 2026-01-10
+
+### Added
+- Work Queue v1 core (SSOT-based): JSONL queue parsing and event folding
+- FIFO invariants and head-of-queue enforcement
+- Human-only enqueue policy (reject github-actions[bot])
+- Deterministic exit codes for queue operations
+
+### Tests
+- Add unit tests for queue invariants and illegal transitions
+
+⸻
+
 [v1.4.3] - 2026-01-09
 
 Added
