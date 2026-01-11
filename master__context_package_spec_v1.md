@@ -68,8 +68,9 @@ In v1.6.0:
 
 ### 4.1 Top-level Schema
 
-```json
+```jsonc
 {
+  // ContextPackage is pure data (design-only in v1.6.0)
   "contextId": "string",
   "jobId": "string",
   "repo": "owner/name",
@@ -78,74 +79,74 @@ In v1.6.0:
   "inputs": {},
   "lifecycle": {
     "state": "created",
-    "createdAt": "RFC3339"
+    "createdAt": "RFC3339 (UTC, seconds precision)"
   },
   "artifacts": [],
   "limits": {},
   "meta": {}
 }
+```
 
+### 4.2 Required Fields (MUST)
 
-⸻
+- contextId
+- jobId
+- repo
+- base
+- actor
+- inputs
+- lifecycle.state
+- lifecycle.createdAt
 
-4.2 Required Fields (MUST)
-	•	contextId
-	•	jobId
-	•	repo
-	•	base
-	•	actor
-	•	inputs
-	•	lifecycle.state
-	•	lifecycle.createdAt
+### 4.3 Optional Fields (MAY)
 
-⸻
+- artifacts
+- limits
+- meta
 
-4.3 Optional Fields (MAY)
-	•	artifacts
-	•	limits
-	•	meta
+### 4.4 Field Constraints
 
-⸻
+- repo: MUST be `owner/name`
+- base: MUST be non-empty
+- actor: MUST be a non-empty string
+- inputs: MUST be a JSON object
+- meta: MUST NOT contain secrets
 
-4.4 Field Constraints
-	•	repo: MUST be owner/name
-	•	base: MUST be non-empty
-	•	actor: MUST be non-empty string
-	•	inputs: MUST be a JSON object
-	•	meta: MUST NOT contain secrets
+---
 
-⸻
+## 5. ID and Timestamp Rules (Normative)
 
-5. ID and Timestamp Rules (Normative)
-	•	contextId format: ctx_<unix>_<rand4>
-	•	Example: ctx_1768109000_abcd
-	•	<unix>: epoch seconds
-	•	<rand4>: 4-char lowercase hex
-	•	createdAt: RFC3339 UTC, seconds precision
+- contextId format: `ctx_<unix>_<rand4>`
+  - Example: `ctx_1768109000_abcd`
+- `<unix>`: epoch seconds
+- `<rand4>`: 4-character lowercase hex suffix
+- IDs are generated once and MUST be treated as immutable identifiers (no re-generation).
+- createdAt: RFC3339 UTC, seconds precision (MUST end with "Z")
 
-⸻
+---
 
-6. Lifecycle Model (Design Only)
+## 6. Lifecycle Model (Design Only)
 
-6.1 States (Conceptual)
-	•	created
-	•	running (future)
-	•	done
-	•	failed
-	•	cancelled
+### 6.1 States (Conceptual)
+- created
+- running (future)
+- done
+- failed
+- cancelled
 
-6.2 Transition Rules
-	•	In v1.6.0, lifecycle transitions are conceptual only
-	•	No runtime transitions are allowed
-	•	No state mutation is allowed
+### 6.2 Transition Rules
+- In v1.6.0, lifecycle transitions are conceptual only
+- No runtime transitions are allowed
+- No state mutation is allowed
 
-⸻
+---
 
-7. Relationship to Work Queue (Hard Boundary)
-	•	Each jobId maps to exactly one contextId
-	•	ContextPackage is conceptually created at job start
-	•	ContextPackage MUST NOT be created during enqueue
-	•	v1.6.0 MUST NOT write ContextPackage to disk or branch
+## 7. Relationship to Work Queue (Hard Boundary)
+- Each jobId maps to exactly one contextId
+- ContextPackage is conceptually created at job start
+- ContextPackage MUST NOT be created during enqueue
+- v1.6.0 MUST NOT write ContextPackage to disk or branch
+- v1.6.0 MUST NOT introduce any production code path dependency on ContextPackage
 
 WorkQueue jobId
       |
@@ -154,87 +155,89 @@ WorkQueue jobId
 ContextPackage contextId
 
 
-⸻
+---
 
-8. Security and Data Handling
-	•	ContextPackage MUST NOT store secrets
-	•	Tokens and credentials MUST NOT be embedded
-	•	Sensitive data MUST NOT be serialized
-	•	ContextPackage is safe to log and inspect
+## 8. Security and Data Handling
+- ContextPackage MUST NOT store secrets
+- Tokens and credentials MUST NOT be embedded
+- Sensitive data MUST NOT be serialized
+- ContextPackage is safe to log and inspect
 
-⸻
+---
 
-9. Interfaces (Design Contracts Only)
+## 9. Interfaces (Design Contracts Only)
 
-9.1 Create (Design)
+### 9.1 Create (Design)
 
 CreateContextPackage(job) -> ContextPackage
 
-	•	No side effects
-	•	No persistence
-	•	No execution
+- No side effects
+- No persistence
+- No execution
 
-⸻
+---
 
-9.2 Resolve (Design)
+### 9.2 Resolve (Design)
 
 GetContextPackage(contextId) -> ContextPackage
 
 
-⸻
+---
 
-9.3 Artifact Registration (Design)
+### 9.3 Artifact Registration (Design)
 
 RegisterArtifact(contextId, artifactRef)
 
-	•	Design only
-	•	No persistence in v1.6.0
+- Design only
+- No persistence in v1.6.0
 
-⸻
+---
 
-10. Storage Model (Design Only)
+## 10. Storage Model (Design Only)
 
 Possible future options:
-	•	Git branch-based (__factory_state__/contexts)
-	•	File-based (factory/contexts/<contextId>.json)
-	•	External store
+- Git branch-based (__factory_state__/contexts)
+- File-based (factory/contexts/<contextId>.json)
+- External store
 
 v1.6.0 constraint:
-	•	Storage MAY be specified
-	•	Storage MUST NOT be implemented
+- Storage options MAY be described as non-binding design notes
+- Storage MUST NOT be implemented in v1.6.0
 
-⸻
+---
 
-11. Invariants (Hard)
-	•	One jobId → one contextId
-	•	ContextPackage is immutable
-	•	No secrets allowed
-	•	No runtime execution allowed
-	•	Must remain compatible with head-only Work Queue semantics
+## 11. Invariants (Hard)
+- One jobId → one contextId
+- ContextPackage is immutable
+- No secrets allowed
+- No runtime execution allowed
+- Must remain compatible with head-only Work Queue semantics
 
-⸻
+---
 
-12. Future Wiring (Non-Binding)
+## 12. Future Wiring (Non-Binding)
 
 The following MAY be introduced in v2.x:
-	•	Worker materialization
-	•	Context isolation
-	•	Parallel execution
-	•	Multi-AaaS contexts
+- Worker materialization
+- Context isolation
+- Parallel execution
+- Multi-AaaS contexts
 
 These are non-binding and non-authoritative in this spec.
+This section is informational and MUST NOT be used as justification for implementation work.
 
-⸻
+---
 
-13. Change Policy
-	•	Changes MUST be made via Pull Request
-	•	Human approval is mandatory
-	•	Version-boundary changes require CHANGELOG entry
+## 13. Change Policy
+- Changes MUST be made via Pull Request
+- Human approval is mandatory
+- Version-boundary changes require CHANGELOG entry
 
-⸻
+---
 
-Appendix A: Example ContextPackage
+## Appendix A: Example ContextPackage
 
+```json
 {
   "contextId": "ctx_1768109000_abcd",
   "jobId": "job_1768108900_1234",
@@ -252,8 +255,14 @@ Appendix A: Example ContextPackage
   "limits": {},
   "meta": {}
 }
+```
 
+---
 
-⸻
+## 14. Exit Criteria (v1.6.0)
+- ContextPackage SSOT is merged to main.
+- No production code path references ContextPackage (design-only boundary preserved).
+- No CI/workflow changes introduce ContextPackage execution or persistence.
+- No storage branches/files for ContextPackage are created in v1.6.0.
 
-END
+# END
