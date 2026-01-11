@@ -57,6 +57,14 @@ Behavior Guarantees
 
 ---
 
+## [v1.4.4] - 2026-01-11
+
+### Changed
+- feat(factory): Work Queue v1 core (v1.5.0) (#36)
+  - https://github.com/milechy/Hetzner_AaaS_Factory/pull/36
+
+---
+
 ## [v1.4.2] - 2026-01-09
 
 ### Fixed
