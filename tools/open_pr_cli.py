@@ -160,7 +160,7 @@ def main() -> None:
         raise SystemExit(2)
 
     # RepoLock gate: any write operations must be executed under lock
-    lock = RepoLock(repo=repo, api_base=api, gh_token=gh_token)
+    lock = RepoLock(repo=repo, api_base=api, gh_token=gh_token, ttl_seconds=3600)
     try:
         lock.acquire(sha=base_sha)
     except RepoLockError:
