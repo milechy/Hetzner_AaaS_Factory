@@ -1,4 +1,3 @@
-# tools/work_queue_cli.py
 from __future__ import annotations
 
 import argparse
@@ -10,10 +9,12 @@ from typing import Any, Dict
 
 from tools.work_queue import (
     BOT_ACTOR,
+    BlockedHead,
     HumanOnlyViolation,
     InvariantViolation,
     SchemaError,
     WorkQueueError,
+    append_transition,
     enqueue,
 )
 
@@ -38,6 +39,28 @@ def _parse_args() -> argparse.Namespace:
         help="JSON object string (must be a dict). Example: '{\"title\":\"...\"}'",
     )
 
+    tr = sub.add_parser("transition", help="Append a non-enqueue transition event (head-of-queue only).")
+    tr.add_argument("--queue-path", default=DEFAULT_QUEUE_PATH)
+    tr.add_argument("--actor", default=os.getenv("GITHUB_ACTOR", ""), help="Actor (required).")
+    tr.add_argument("--type", required=True, choices=["start", "block", "unblock", "done", "fail", "cancel"])
+    tr.add_argument("--job-id", required=True)
+    tr.add_argument("--reason", default=None)
+    tr.add_argument("--evidence", default=None)
+    tr.add_argument("--meta-json", default=None, help="Optional JSON object string.")
+
+    trssot = sub.add_parser(
+        "transition-ssot",
+        help="Append a non-enqueue transition event to the SSOT branch (head-of-queue only).",
+    )
+    trssot.add_argument("--ssot-branch", default=DEFAULT_SSOT_BRANCH)
+    trssot.add_argument("--remote", default=DEFAULT_REMOTE)
+    trssot.add_argument("--actor", default=os.getenv("GITHUB_ACTOR", ""), help="Actor (required).")
+    trssot.add_argument("--type", required=True, choices=["start", "block", "unblock", "done", "fail", "cancel"])
+    trssot.add_argument("--job-id", required=True)
+    trssot.add_argument("--reason", default=None)
+    trssot.add_argument("--evidence", default=None)
+    trssot.add_argument("--meta-json", default=None, help="Optional JSON object string.")
+
     ssot = sub.add_parser("enqueue-ssot", help="Append an enqueue event to the SSOT branch (human only).")
     ssot.add_argument("--ssot-branch", default=DEFAULT_SSOT_BRANCH)
     ssot.add_argument("--remote", default=DEFAULT_REMOTE)
@@ -61,6 +84,18 @@ def _load_payload(payload_json: str) -> Dict[str, Any]:
         raise SchemaError(f"payload_json_invalid: {e}") from e
     if not isinstance(obj, dict):
         raise SchemaError("payload_json_must_be_object")
+    return obj
+
+
+def _load_meta(meta_json: str | None) -> Dict[str, Any] | None:
+    if not meta_json:
+        return None
+    try:
+        obj = json.loads(meta_json)
+    except json.JSONDecodeError as e:
+        raise SchemaError(f"meta_json_invalid: {e}") from e
+    if not isinstance(obj, dict):
+        raise SchemaError("meta_json_must_be_object")
     return obj
 
 
@@ -131,6 +166,97 @@ def main() -> None:
 
         print(
             f"[WorkQueue] enqueue ok jobId={ev['jobId']} eventId={ev['eventId']} repo={ev['job']['repo']} base={ev['job']['base']}"
+        )
+        return
+
+    if args.cmd == "transition":
+        actor = (args.actor or "").strip()
+        if not actor:
+            print("[WorkQueue] exit=4 reason=missing_actor", file=sys.stderr)
+            raise SystemExit(4)
+
+        meta = _load_meta(args.meta_json)
+
+        try:
+            ev = append_transition(
+                queue_path=args.queue_path,
+                actor=actor,
+                event_type=args.type,
+                job_id=args.job_id,
+                reason=args.reason,
+                evidence=args.evidence,
+                meta=meta,
+            )
+        except BlockedHead as e:
+            print(f"[WorkQueue] exit=2 reason=blocked detail={e}", file=sys.stderr)
+            raise SystemExit(2)
+        except HumanOnlyViolation as e:
+            print(f"[WorkQueue] exit=4 reason=human_only detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except (SchemaError, InvariantViolation) as e:
+            print(f"[WorkQueue] exit=4 reason=invariant_or_schema detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except WorkQueueError as e:
+            msg = str(e)
+            if "git_failed" in msg:
+                print(f"[WorkQueue] exit=4 reason=git_error detail={msg}", file=sys.stderr)
+                raise SystemExit(4)
+            print(f"[WorkQueue] exit=4 reason=work_queue_error detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+
+        print(f"[WorkQueue] transition ok type={ev['type']} jobId={ev['jobId']} eventId={ev['eventId']}")
+        return
+
+    if args.cmd == "transition-ssot":
+        actor = (args.actor or "").strip()
+        if not actor:
+            print("[WorkQueue] exit=4 reason=missing_actor", file=sys.stderr)
+            raise SystemExit(4)
+
+        meta = _load_meta(args.meta_json)
+
+        orig = _current_branch()
+        try:
+            _git(["fetch", args.remote, args.ssot_branch])
+            _git(["switch", "-C", "__wq__/ssot", "FETCH_HEAD"])  # local scratch branch
+
+            _ensure_queue_init(DEFAULT_QUEUE_PATH)
+
+            ev = append_transition(
+                queue_path=DEFAULT_QUEUE_PATH,
+                actor=actor,
+                event_type=args.type,
+                job_id=args.job_id,
+                reason=args.reason,
+                evidence=args.evidence,
+                meta=meta,
+            )
+
+            _git(["add", DEFAULT_QUEUE_PATH])
+            _git(["commit", "-m", f"chore(queue): {ev['type']} {ev['jobId']}"])
+            _git(["push", args.remote, f"HEAD:{args.ssot_branch}"])
+
+        except BlockedHead as e:
+            print(f"[WorkQueue] exit=2 reason=blocked detail={e}", file=sys.stderr)
+            raise SystemExit(2)
+        except HumanOnlyViolation as e:
+            print(f"[WorkQueue] exit=4 reason=human_only detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except (SchemaError, InvariantViolation) as e:
+            print(f"[WorkQueue] exit=4 reason=invariant_or_schema detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        except WorkQueueError as e:
+            msg = str(e)
+            if "git_failed" in msg:
+                print(f"[WorkQueue] exit=4 reason=git_error detail={msg}", file=sys.stderr)
+                raise SystemExit(4)
+            print(f"[WorkQueue] exit=4 reason=work_queue_error detail={e}", file=sys.stderr)
+            raise SystemExit(4)
+        finally:
+            _switch_back(orig)
+
+        print(
+            f"[WorkQueue] transition ok type={ev['type']} jobId={ev['jobId']} eventId={ev['eventId']} ssot_branch={args.ssot_branch}"
         )
         return
 
