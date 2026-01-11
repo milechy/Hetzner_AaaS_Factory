@@ -5,3 +5,4 @@
 {"eventId":"evt_1768106764_acb3","ts":"2026-01-11T04:46:04Z","actor":"milechy","type":"done","jobId":"job_1768100234_448a","reason":"smoketest complete"}
 {"eventId":"evt_1768107087_e65e","ts":"2026-01-11T04:51:27Z","actor":"milechy","type":"start","jobId":"job_1768106692_9216"}
 {"eventId":"evt_1768107094_3043","ts":"2026-01-11T04:51:34Z","actor":"milechy","type":"done","jobId":"job_1768106692_9216","reason":"head-only check complete"}
+{"eventId":"evt_1768107193_365b","ts":"2026-01-11T04:53:13Z","actor":"milechy","type":"enqueue","jobId":"job_1768107193_edf9","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest3","body":"non-head mutation should fail"}}}
