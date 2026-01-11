@@ -175,8 +175,18 @@ def validate_event_schema(event: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
             raise SchemaError("invalid_job_payload")
     else:
-        # job MUST NOT be required; allow evidence/reason/meta optionally
-        pass
+        # Non-enqueue events: job is optional. Optional keys must be well-typed when present.
+        if "job" in event and not isinstance(event.get("job"), dict):
+            raise SchemaError("invalid_job")
+
+        if "reason" in event and not isinstance(event.get("reason"), str):
+            raise SchemaError("invalid_reason")
+
+        if "evidence" in event and not isinstance(event.get("evidence"), str):
+            raise SchemaError("invalid_evidence")
+
+        if "meta" in event and not isinstance(event.get("meta"), dict):
+            raise SchemaError("invalid_meta")
 
 
 # -----------------------------
@@ -345,5 +355,87 @@ def enqueue(
     events = read_jsonl_file(queue_path)
     ev = build_enqueue_event(actor=actor, job_kind=job_kind, repo=repo, base=base, payload=payload)
     validate_enqueue_append(events, ev)
+    append_jsonl_line(queue_path, ev)
+    return ev
+
+
+# -----------------------------
+# Transitions (start/block/unblock/done/fail/cancel)
+# -----------------------------
+
+
+def build_transition_event(
+    *,
+    actor: str,
+    event_type: str,
+    job_id: str,
+    reason: Optional[str] = None,
+    evidence: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+    epoch: Optional[int] = None,
+) -> Dict[str, Any]:
+    if event_type not in EVENT_TYPES or event_type == "enqueue":
+        raise SchemaError(f"invalid_transition_type type={event_type}")
+
+    # Spec: unblock must be human-triggered.
+    if event_type == "unblock" and actor == BOT_ACTOR:
+        raise HumanOnlyViolation("unblock_actor_must_be_human")
+
+    ev: Dict[str, Any] = {
+        "eventId": make_event_id(epoch=epoch),
+        "ts": now_rfc3339_utc(),
+        "actor": actor,
+        "type": event_type,
+        "jobId": job_id,
+    }
+
+    if reason is not None:
+        ev["reason"] = reason
+    if evidence is not None:
+        ev["evidence"] = evidence
+    if meta is not None:
+        ev["meta"] = meta
+
+    return ev
+
+
+def validate_transition_append(events: List[Dict[str, Any]], transition_event: Dict[str, Any]) -> None:
+    validate_event_schema(transition_event)
+
+    state = derive_queue_state(events)
+    jid = transition_event["jobId"]
+
+    # Must reference an existing jobId
+    if jid not in state.job_states:
+        raise InvariantViolation(f"unknown_jobId jobId={jid}")
+
+    # Hard invariant: only head-of-queue can be mutated.
+    ensure_head_can_transition(state, jid)
+
+    # Validate that appending this transition yields a valid fold.
+    # This enforces the legal transition rules in `_next_state`.
+    _ = derive_queue_state([*events, transition_event])
+
+
+def append_transition(
+    *,
+    queue_path: str,
+    actor: str,
+    event_type: str,
+    job_id: str,
+    reason: Optional[str] = None,
+    evidence: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    events = read_jsonl_file(queue_path)
+    ev = build_transition_event(
+        actor=actor,
+        event_type=event_type,
+        job_id=job_id,
+        reason=reason,
+        evidence=evidence,
+        meta=meta,
+    )
+    validate_transition_append(events, ev)
     append_jsonl_line(queue_path, ev)
     return ev
