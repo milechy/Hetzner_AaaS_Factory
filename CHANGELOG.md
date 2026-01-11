@@ -70,6 +70,14 @@ Behavior Guarantees
 
 ---
 
+## [v1.5.1] - 2026-01-11
+
+### Changed
+- Docs/v1.5.0 work queue spec (#37)
+  - https://github.com/milechy/Hetzner_AaaS_Factory/pull/37
+
+---
+
 ## [v1.4.2] - 2026-01-09
 
 ### Fixed
