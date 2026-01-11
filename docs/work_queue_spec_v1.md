@@ -54,11 +54,12 @@ Rationale:
 ### 2.2 Where the SSOT Lives (Branch Policy)
 
 To keep `main` protected and avoid “state churn” PRs:
-- SSOT branch SHOULD be a dedicated branch, e.g. `__factory_state__/work_queue`.
+- SSOT branch MUST be the dedicated branch: `__factory_state__/work_queue`
 
 Rules:
 - Human enqueue MUST be performed by a human action (CLI/manual), targeting the SSOT branch.
 - Worker state updates MAY write to the SSOT branch (no PR required), because it is operational state.
+- The queue SSOT path is fixed: `factory/work_queue.jsonl`
 - Product/feature code changes MUST still follow the Human Gate policy on `main`.
 
 This spec does not mandate GitHub branch protection settings,
@@ -88,6 +89,21 @@ Optional keys:
 - `reason` (string): reason for block/fail/cancel
 - `meta` (object): any extra stable metadata (must not include secrets)
 
+### 3.1.1 ID Generation (Normative)
+
+The following formats are mandatory to keep the queue auditable and deterministic:
+
+- `eventId`: `evt_<unix>_<rand4>`
+  - Example: `evt_1768092678_a1b2`
+- `jobId`: `job_<unix>_<rand4>`
+  - Example: `job_1768092678_c3d4`
+- `ts`: RFC3339 UTC (seconds precision)
+  - Example: `2026-01-10T06:33:58Z`
+
+Notes:
+- `<unix>` is an integer Unix epoch seconds.
+- `<rand4>` is a 4-char lowercase hex suffix.
+
 ### 3.2 Derived Job State
 
 The “current state” of a job is derived by folding events by `jobId` in file order.
@@ -99,6 +115,17 @@ Non-terminal:
 - `queued` (after `enqueue` and before terminal)
 - `running` (after `start` and before terminal)
 - `blocked` (after `block` and before `unblock`/terminal)
+
+### 3.3 State Transition Rules (Hard)
+
+The worker and human tools MUST enforce these rules:
+
+- A `jobId` MUST have exactly one `enqueue` event. A second `enqueue` for the same `jobId` is a FAIL (schema/invariant violation).
+- `start` is allowed only when the derived state is `queued`.
+- `block` is allowed only when the derived state is `running`.
+- `unblock` is allowed only when the derived state is `blocked`.
+- `done` / `fail` are allowed only when the derived state is `running` or `blocked`.
+- `cancel` is allowed only when the derived state is `queued` or `blocked`.
 
 ---
 
@@ -121,9 +148,11 @@ These invariants MUST always hold:
 
 Queue read-modify-append MUST be guarded by a queue-level lock.
 
-Recommended mechanism:
-- Reuse RepoLock with a distinct lock namespace, e.g.
+Recommended mechanism (mandatory wiring in v1.5.0):
+- Reuse RepoLock with the fixed lock namespace:
   - `refs/heads/__factory_lock__/work_queue/<epoch>`
+- The lock namespace for the queue is fixed: `__factory_lock__/work_queue`
+- Default TTL for the queue lock MUST be 3600 seconds
 
 Rules:
 - Acquire queue lock before:
@@ -151,6 +180,7 @@ Operation:
 
 Validation:
 - Must include `job.kind`, `job.repo`, `job.base`, `job.payload`.
+- `actor` MUST NOT be `github-actions[bot]`.
 
 No auto-enqueue. No implicit enqueue on merge.
 
@@ -172,7 +202,7 @@ Block:
   (e.g. PRSchedule indicates review is pending).
 
 Unblock:
-- MUST be human-triggered (v1.5.0).
+- MUST be human-triggered (v1.5.0). `actor` MUST NOT be `github-actions[bot]`.
 - Append `unblock` event to the same jobId.
 
 ### 6.4 Done / Fail / Cancel
@@ -199,6 +229,14 @@ Fail-fast (FAIL):
 - invalid event schema
 - invariant violation (e.g. attempt to start non-head job)
 - lock acquisition failure (queue lock)
+
+### 7.1 Process Exit Codes (Normative)
+
+When implemented as CLI/worker processes, exit codes MUST be:
+
+- `2`: blocked (head-of-queue is blocked; no mutation performed)
+- `3`: lock acquisition failure (queue lock could not be acquired / maintained)
+- `4`: invariant violation (schema error, illegal transition, or attempt to start non-head job)
 
 ---
 
