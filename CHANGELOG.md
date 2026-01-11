@@ -6,6 +6,37 @@ controlled Git operations.
 
 ⸻
 
+## [v1.5.3] - 2026-01-11
+
+### Added
+- Work Queue SSOT transition (`transition-ssot`)
+  - Head-of-queue のみが状態遷移可能（start / block / unblock / done / fail / cancel）
+  - 非 head ジョブの mutation は即 FAIL（invariant violation）
+  - `blocked` / `unblock` の human-only 制約を厳密に強制
+  - すべての遷移は `__factory_state__/work_queue:factory/work_queue.jsonl` に追記
+
+### Behavior Guarantees
+- FIFO 不変条件を **実行時に強制**
+- 同時 running は常に 1 件以下
+- SSOT は append-only（rewrite / reorder 不可）
+- 非人間 actor（`github-actions[bot]`）による状態遷移は不可
+
+### CLI
+- `work_queue_cli transition-ssot`
+  - queue SSOT ブランチを fetch → switch → append → commit → push
+  - exit codes:
+    - `2`: head job が blocked
+    - `3`: SSOT lock 取得失敗
+    - `4`: schema / invariant violation
+
+### Notes
+- v1.5.3 は **Work Queue v1 の実運用遷移点**
+- v1.5.0 = core 実装到達点  
+  v1.5.1 / v1.5.2 = IO 整備  
+  **v1.5.3 = Factory が queue を「動かせる」最小完成形**
+
+⸻
+
 ## [v1.5.2] - 2026-01-11
 
 ### Added
