@@ -14,6 +14,10 @@ Scope: Humans / GPT Projects / VS Code Agent / Copilot Agent
 This document is **authoritative and binding**.  
 Anything not explicitly allowed here **MUST NOT be implemented**.
 
+Design-only enforcement notes (v1.6.0):
+- This spec MAY be referenced by humans/tools for documentation, review, and design validation.
+- This spec MUST NOT be referenced by CI/workflows/automation to make execution decisions or to introduce any runtime behavior.
+
 ---
 
 ## 0. Purpose
@@ -44,11 +48,10 @@ The following are **explicitly forbidden in v1.6.0**:
 - Secret storage or secret injection
 - Cross-run or long-term memory layers
 - Automatic ContextPackage creation at runtime
-- Creation of any ContextPackage SSOT branch or file
+- Creating any ContextPackage SSOT branch or file
 - Importing ContextPackage types into runtime / production modules
 - Adding tests that exercise ContextPackage behavior
 - Referencing ContextPackage from CI, workflows, or automation code
-
 - Any reference to ContextPackage in runtime logs (because ContextPackage MUST NOT be materialized in v1.6.0)
 - Any generation of ContextPackage IDs in production/automation code paths
 - Any CI job or GitHub Action step that reads/writes ContextPackage data
@@ -263,14 +266,14 @@ v1.6.0 constraint:
 
 ## 12. Future Wiring (Non-Binding)
 
-The following MAY be introduced in v2.x:
-
-- Worker materialization
-- Context isolation
-- Parallel execution
-- Multi-AaaS contexts
-
 This section is informational only and MUST NOT justify implementation work.
+These are non-binding and non-authoritative in this spec.
+This section (and any examples/appendices) is informational and MUST NOT be used as justification for implementation work.
+
+### 12.1 Non-Binding Examples (Hard)
+
+Any example payloads, schemas, or diagrams in this document are illustrative.
+They MUST NOT be used as implementation requirements in v1.6.0 and MUST NOT be used to justify adding runtime wiring.
 
 ---
 
@@ -308,9 +311,9 @@ This section is informational only and MUST NOT justify implementation work.
 
 ## 14. Exit Criteria (v1.6.0)
 
-- ContextPackage SSOT is present on `main`
-- No production code references ContextPackage
-- No CI / workflow executes or persists ContextPackage
-- No ContextPackage storage branch/file exists
+- ContextPackage SSOT is present on `main`.
+- No production code references ContextPackage.
+- No CI / workflow executes or persists ContextPackage.
+- No ContextPackage storage branch/file exists.
 
 # END
