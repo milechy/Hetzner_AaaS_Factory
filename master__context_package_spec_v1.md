@@ -8,6 +8,14 @@ Release Policy: This spec does NOT trigger a release by itself. No CHANGELOG ent
 Normative language: The keywords **MUST**, **MUST NOT**, **SHOULD**, **MAY** are used as binding requirements in this document.
 Roadmap alignment: This spec is the v1.6.0 “design-only” deliverable referenced by `master__factory_version_roadmap_v1.md`.
 
+## v1.7.0 Preview (Materialization Minimal)
+
+This spec also defines the **minimum allowed v1.7.0 implementation boundary** for ContextPackage.
+
+- v1.6.0 remains **design-only** (no runtime, no storage, no execution).
+- v1.7.0 allows **minimal materialization** (SSOT write) while preserving **head-only** Work Queue execution.
+- Any runtime behavior beyond what is explicitly allowed in the **v1.7.0** sections below is forbidden.
+
 Status: **DESIGN ONLY (v1.6.0)**  
 Scope: Humans / GPT Projects / VS Code Agent / Copilot Agent
 
@@ -48,7 +56,8 @@ The following are **explicitly forbidden in v1.6.0**:
 - Secret storage or secret injection
 - Cross-run or long-term memory layers
 - Automatic ContextPackage creation at runtime
-- Creating any ContextPackage SSOT branch or file
+- (v1.6.0) Creating any ContextPackage SSOT branch or file
+- (v1.7.0+) Any ContextPackage SSOT branch/file other than the explicitly allowed `__factory_state__/contexts` layout (see §10A)
 - Importing ContextPackage types into runtime / production modules
 - Adding tests that exercise ContextPackage behavior
 - Referencing ContextPackage from CI, workflows, or automation code
@@ -254,6 +263,63 @@ v1.6.0 constraint:
 
 ---
 
+## 10A. v1.7.0 Minimal Materialization (SSOT Storage Allowed)
+
+This section is **normative for v1.7.0** and is the only allowed implementation scope.
+
+### 10A.1 Allowed Storage (v1.7.0)
+
+In v1.7.0, ContextPackage **MAY** be materialized as a single immutable JSON document written to a dedicated SSOT branch.
+
+- SSOT branch: `__factory_state__/contexts`
+- SSOT path: `factory/contexts/<contextId>.json`
+- Write policy: **append-only by file creation** (create once; never modify)
+- Immutability: once written, the file **MUST NOT** be changed or overwritten in v1.7.0.
+
+### 10A.2 Generation Timing (v1.7.0)
+
+- ContextPackage creation is allowed only for the **head job** of the Work Queue.
+- ContextPackage creation **MUST** occur after the job is transitioned to `start` and before any job-specific work is executed.
+- The implementation **MUST** fail-fast if the referenced `jobId` does not exist in the queue SSOT.
+
+### 10A.3 Minimal Required Fields (v1.7.0)
+
+A materialized ContextPackage document **MUST** include:
+- `contextId` (format `ctx_<unix>_<rand4>`)
+- `jobId`
+- `createdAt` (RFC3339 UTC, seconds precision, MUST end with `Z`)
+- `job` (a stable snapshot copied from the queue enqueue event):
+  - `kind`, `repo`, `base`, `payload`
+- `source` metadata:
+  - `queueBranch`: MUST be `__factory_state__/work_queue`
+  - `queuePath`: MUST be `factory/work_queue.jsonl`
+  - `startEventId`: eventId of the `start` transition (if available)
+
+The document **MUST NOT** include secrets, tokens, credentials, or any sensitive material.
+
+### 10A.4 Idempotency / Uniqueness Rules (Hard)
+
+- A `jobId` **MUST** map to exactly one `contextId`.
+- If a ContextPackage already exists for a given `jobId`, creation **MUST** fail with an invariant violation.
+- If a file already exists at `factory/contexts/<contextId>.json`, creation **MUST** fail (no overwrite).
+
+### 10A.5 Locking (Hard)
+
+All read-modify-write operations against the contexts SSOT branch **MUST** be guarded by a lock.
+
+- Lock mechanism: reuse `RepoLock`
+- Lock namespace: `__factory_lock__/contexts`
+- Default TTL: 3600 seconds
+
+### 10A.6 Exit Codes (Normative)
+
+When implemented as CLI/worker processes, exit codes MUST be:
+- `2`: blocked (head-of-queue blocked; no mutation performed)
+- `3`: lock acquisition failure (contexts SSOT lock)
+- `4`: invariant/schema violation (unknown jobId, non-head mutation, duplicate context)
+
+---
+
 ## 11. Invariants (Hard)
 
 - One jobId → one contextId
@@ -311,9 +377,9 @@ They MUST NOT be used as implementation requirements in v1.6.0 and MUST NOT be u
 
 ## 14. Exit Criteria (v1.6.0)
 
-- ContextPackage SSOT is present on `main`.
-- No production code references ContextPackage.
-- No CI / workflow executes or persists ContextPackage.
-- No ContextPackage storage branch/file exists.
+- ContextPackage SSOT is present on `main` (this spec).
+- v1.6.0 introduces **design-only** constraints and does not create any contexts branch/file.
+- No production code references ContextPackage in v1.6.0.
+- No CI / workflow executes or persists ContextPackage in v1.6.0.
 
 # END
