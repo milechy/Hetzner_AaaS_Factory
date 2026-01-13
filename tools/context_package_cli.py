@@ -18,8 +18,8 @@ from tools.work_queue import SchemaError, InvariantViolation, derive_queue_state
 CONTEXTS_SSOT_BRANCH = "__factory_state__/contexts"
 
 # ContextPackage Spec v1: Work Queue SSOT source branch and path
-QUEUE_SSOT_BRANCH = "__factory_state__/queue"
-QUEUE_SSOT_PATH = "factory/queue/events.jsonl"
+QUEUE_SSOT_BRANCH = "__factory_state__/work_queue"
+QUEUE_SSOT_PATH = "factory/work_queue.jsonl"
 
 
 # --- Compatibility layer ---
