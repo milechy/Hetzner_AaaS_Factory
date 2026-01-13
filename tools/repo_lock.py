@@ -76,7 +76,9 @@ class RepoLock:
     def _matching_refs_url(self) -> str:
         # GitHub API expects the path without the leading "refs/".
         # matching-refs supports prefixes such as "heads/<prefix>".
-        return f"{self.api_base}/repos/{self.repo}/git/matching-refs/heads/__factory_lock__/open_pr"
+        return (
+            f"{self.api_base}/repos/{self.repo}/git/matching-refs/heads/__factory_lock__/open_pr"
+        )
 
     def _delete_ref_url(self, full_ref: str) -> str:
         # DELETE expects e.g. heads/__factory_lock__/open_pr/1234
@@ -188,11 +190,6 @@ class RepoLock:
                 print(f"[RepoLock] acquire ok repo={self.repo} ref={self.lock_ref}")
                 return
 
-            if r.status_code == 422:
-                # Collision (another actor created a lock ref). Re-check locks.
-                last_exc = RepoLockError("REPO_LOCK_COLLISION")
-                continue
-
             # Improve diagnostics for common GitHub auth failures.
             if r.status_code == 403:
                 msg = ""
@@ -205,11 +202,23 @@ class RepoLock:
                 except Exception:
                     msg = ""
 
-                if "Resource not accessible by personal access token" in msg:
+                # Git refs creation requires sufficient repo permissions.
+                # GitHub commonly returns one of the following messages when a PAT
+                # can authenticate but is not allowed to create refs.
+                insufficient_markers = (
+                    "Resource not accessible by personal access token",
+                    "Must have push access to view repository",
+                )
+                if any(m in msg for m in insufficient_markers):
                     print(
                         f"[RepoLock] acquire fail reason=token_insufficient_for_git_refs repo={self.repo} ref={ref} status=403"
                     )
                     raise RepoLockError("TOKEN_INSUFFICIENT_FOR_GIT_REFS")
+
+            if r.status_code == 422:
+                # Collision (another actor created a lock ref). Re-check locks.
+                last_exc = RepoLockError("REPO_LOCK_COLLISION")
+                continue
 
             print(
                 f"[RepoLock] acquire fail reason=github_api_error repo={self.repo} ref={ref} status={r.status_code}"
