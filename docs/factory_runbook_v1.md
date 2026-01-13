@@ -316,5 +316,3 @@ v1.5.x では Work Queue / RepoLock / Open-PR の安全ガードが揃ったが�
 - Detailed Work Queue operational procedures are defined in `docs/work_queue_operations_v1.md`.
 
 ---
-
-# END

@@ -7,13 +7,15 @@ controlled Git operations.
 ⸻
 
 ## Unreleased
+- ContextPackage v1.7.0 minimal SSOT materialization: core builder + CLI wiring to `__factory_state__/work_queue`.
 - Add v1.7.0 roadmap entry for ContextPackage SSOT materialization (minimal).
+- RepoLock: classify GitHub 403 PAT insufficient for Git refs (`TOKEN_INSUFFICIENT_FOR_GIT_REFS`).
 
 ⸻
 
 ## [v1.5.3] - 2026-01-11
 
-### Added
+Added
 - Work Queue SSOT transition (`transition-ssot`)
   - Head-of-queue のみが状態遷移可能（start / block / unblock / done / fail / cancel）
   - 非 head ジョブの mutation は即 FAIL（invariant violation）
@@ -62,13 +64,13 @@ controlled Git operations.
 
 ⸻
 
-[v1.4.3] - 2026-01-09
+## [v1.4.3] - 2026-01-09
 
-Added
+### Added
 	•	RepoLock を OpenPR の write operations 境界として正式導入
 	•	open_pr_cli.py のすべての write-side GitHub API 操作（branch 作成 / commit / PR 作成）を
 Repo-level fail-fast lock で明示的に保護。
-	•	Lock ref: refs/heads/__factory_lock__/open_pr
+	•	Lock ref: refs/heads/__factory_lock__/open_pr/<epoch>
 	•	Lock acquire は PRScheduler 通過後、最初の write 操作直前に実行。
 	•	Lock release は finally ブロックで必ず実行（成功・失敗・例外時を含む）。
 
@@ -182,7 +184,7 @@ Behavior Guarantees
 ## [v1.3.10] - 2026-01-08
 
 ### Added
-- Repo-level fail-fast lock for OpenPR execution (`refs/heads/__factory_lock__/open_pr`)
+- Repo-level fail-fast lock for OpenPR execution (`refs/heads/__factory_lock__/open_pr/<epoch>`)
 - Minimal PR scheduler to prevent concurrent Factory PR creation on the same base branch (fail-fast, no wait/retry)
 
 ### Changed
