@@ -1,5 +1,4 @@
-
-# Tooling & Knowledge Adoption Registry v1.1
+# Tooling & Knowledge Adoption Registry v1.2
 # SSOT – Authoritative Record of Evaluated Tools, OSS, and Concepts
 
 ## Binding Rule (Hard)
@@ -11,6 +10,7 @@
 
 ## 0.1 Change Log
 - v1.1: Add normative metadata fields (Reference SSOT, Revisit Condition, AdoptedAt) and proposal gate rules to prevent re‑proposal drift.
+- v1.2: Adopt `requests` (Supporting) for RepoLock GitHub REST calls (limited scope).
 
 ## 0. Purpose
 
@@ -36,6 +36,15 @@ Rules:
 - VS Code Agent Mode / GitHub Copilot Agent Mode  
   Status: Adopted  
   Scope: Execution layer only (no autonomous decisions)
+
+- Name: requests (Python HTTP client)
+  Status: Adopted (Supporting)
+  Scope: `tools/repo_lock.py` GitHub REST API calls (GET/POST/DELETE) for RepoLock acquire/release only.
+  Prohibited: General-purpose external HTTP access (scraping, arbitrary third-party API integration, unattended runtime network expansion).
+  Rationale: RepoLock requires GitHub `git/refs` operations; `requests` is the minimal dependency to perform authenticated REST calls and classify 403 PAT-insufficient failures deterministically.
+  Reference SSOT: `factory_master_v3.md`, `master__factory_automation_master_v10.md`, `master__security_checklist_v2.md`
+  AdoptedAt: 2026-01-13
+  Revisit Condition: Replace RepoLock HTTP implementation with Python stdlib (urllib) and remove the runtime dependency.
 
 ### Infrastructure & Ops
 - Postgres PITR  
