@@ -5,6 +5,26 @@ from tools.repo_lock import RepoLock, RepoLockError
 
 
 class TestRepoLock(unittest.TestCase):
+    @patch("tools.repo_lock.requests.get")
+    @patch("tools.repo_lock.requests.post")
+    def test_acquire_403_pat_insufficient_scopes_classified(self, mock_post, mock_get):
+        get_resp = Mock()
+        get_resp.status_code = 200
+        get_resp.json.return_value = []
+        mock_get.return_value = get_resp
+
+        resp = Mock()
+        resp.status_code = 403
+        resp.json.return_value = {
+            "message": "Resource not accessible by personal access token",
+            "status": "403",
+        }
+        mock_post.return_value = resp
+
+        with self.assertRaises(RepoLockError) as ctx:
+            self.lock.acquire(sha="abc")
+
+        self.assertIn("TOKEN_INSUFFICIENT_FOR_GIT_REFS", str(ctx.exception))
     def setUp(self) -> None:
         self.lock = RepoLock(
             repo="owner/repo",
