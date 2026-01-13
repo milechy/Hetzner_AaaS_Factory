@@ -193,6 +193,24 @@ class RepoLock:
                 last_exc = RepoLockError("REPO_LOCK_COLLISION")
                 continue
 
+            # Improve diagnostics for common GitHub auth failures.
+            if r.status_code == 403:
+                msg = ""
+                try:
+                    body = r.json()
+                    if isinstance(body, dict):
+                        raw_msg = body.get("message")
+                        if isinstance(raw_msg, str):
+                            msg = raw_msg
+                except Exception:
+                    msg = ""
+
+                if "Resource not accessible by personal access token" in msg:
+                    print(
+                        f"[RepoLock] acquire fail reason=token_insufficient_for_git_refs repo={self.repo} ref={ref} status=403"
+                    )
+                    raise RepoLockError("TOKEN_INSUFFICIENT_FOR_GIT_REFS")
+
             print(
                 f"[RepoLock] acquire fail reason=github_api_error repo={self.repo} ref={ref} status={r.status_code}"
             )
