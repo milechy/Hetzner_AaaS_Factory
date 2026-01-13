@@ -6,6 +6,11 @@ controlled Git operations.
 
 ⸻
 
+## Unreleased
+- Add v1.7.0 roadmap entry for ContextPackage SSOT materialization (minimal).
+
+⸻
+
 ## [v1.5.3] - 2026-01-11
 
 ### Added
