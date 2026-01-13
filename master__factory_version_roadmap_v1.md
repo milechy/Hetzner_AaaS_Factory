@@ -183,4 +183,35 @@ List locks:
 Delete a lock ref:
   gh api -X DELETE repos/:owner/:repo/git/refs/heads/__factory_lock__/open_pr/<epoch>
 
+---
+
+### v1.7.0 — ContextPackage (SSOT Materialization, Minimal)
+Goal:
+Materialize a ContextPackage into SSOT **without enabling execution wiring**.
+
+Allowed:
+- Create ContextPackage SSOT artifacts on the `__factory_state__/contexts` branch
+- Append-only / immutable context documents (create-only; no update/delete)
+- Minimal CLI command to perform the materialization (no orchestration)
+- RepoLock usage for contexts namespace (TTL default 3600)
+
+Not Allowed:
+- Any runtime isolation
+- Any concurrent execution
+- Any multi-AaaS runs
+- Any automation wiring that triggers jobs using ContextPackage
+- Any mutation of existing ContextPackage documents
+
+Exit Criteria:
+- A head-of-queue job can materialize exactly one ContextPackage into `__factory_state__/contexts`.
+- Duplicate materialization for the same `jobId` is rejected.
+- ContextPackage docs are created-only (immutable).
+
+References:
+- `master__context_package_spec_v1.md` §10A (v1.7.0 preview)
+- `work_queue_operations_v1.md` (head-of-queue discipline)
+- `factory_master_v3.md` (PR-first / no direct push)
+
+---
+
 # END
