@@ -107,6 +107,39 @@ Factoryは以下を前提に設計されている：
 	•	以降の変更は PRでのみ進行
 	•	勝手に「完成形」を仮定しない
 
+6.3 ContextPackage（v1.7.0: SSOT materialization, Minimal）
+
+Factory が「途中プロジェクトの現状を Context として固定」するために、
+v1.7.0 では ContextPackage を SSOT に materialize できる（保存のみ）。
+
+拘束（必須）
+	•	保存のみ（storage-only）。実行・オーケストレーション・自動トリガーは禁止
+	•	Work Queue の head-of-queue の jobId のみ対象
+	•	actor は human のみ（`github-actions[bot]` は禁止）
+	•	出力は create-only（既存 ContextPackage は更新・削除禁止）
+
+生成先（SSOT）
+	•	Work Queue SSOT: `__factory_state__/work_queue`（`factory/work_queue.jsonl`）
+	•	Contexts SSOT: `__factory_state__/contexts`（`factory/contexts/*.json`）
+
+実行例（Human CLI）
+
+```bash
+# Preconditions:
+# - jobId is head-of-queue
+# - actor is human
+# - GITHUB_TOKEN has permission to create git refs (RepoLock)
+
+PYTHONPATH=. python tools/context_package_cli.py materialize-ssot \
+  --actor "$GITHUB_ACTOR" \
+  --job-id "<jobId>"
+```
+
+結果（Exit Codes）
+	•	2: head job is blocked
+	•	3: RepoLock acquisition failed
+	•	4: schema / invariant violation（例：duplicate jobId materialization）
+
 ⸻
 
 7. なぜ「まだ自律開発じゃないのか」
@@ -156,5 +189,3 @@ Factoryは 優先順位を決めない。
 	•	あなたが速度ではなく 判断に集中できる
 
 ⸻
-
-END
