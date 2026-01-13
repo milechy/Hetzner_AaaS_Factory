@@ -1,5 +1,5 @@
 # Factory Runbook v1
-# SSOT – Operational Guidance (v1.5.x stable, v1.6.0 design-aware)
+# SSOT – Operational Guidance (v1.5.x stable, v1.7.0 minimal ContextPackage SSOT)
 
 Status: **ACTIVE (Operations)**  
 Applies to: Humans operating the Factory repository  
@@ -34,12 +34,23 @@ It is complementary to SSOT specs and MUST NOT introduce new behavior.
   - Human-only enqueue
   - Head-only transitions
 
+### Implemented (v1.7.0, Minimal)
+
+- ContextPackage SSOT materialization (storage-only)
+  - Creates immutable ContextPackage documents on `__factory_state__/contexts`
+  - NO runtime usage / NO execution wiring / NO orchestration triggers
+  - Duplicate materialization for the same `jobId` is rejected
+  - Exit codes (aligned with Work Queue CLI):
+    - 2: head job is blocked
+    - 3: RepoLock acquisition failed
+    - 4: schema / invariant violation
+
 ### Design-Only (v1.6.0)
 
-- ContextPackage
+- ContextPackage (beyond v1.7.0 minimal materialization)
   - **NO runtime usage**
-  - **NO storage**
   - **NO execution wiring**
+  - **NO orchestration / automation triggers**
 
 ---
 
@@ -57,6 +68,14 @@ It is complementary to SSOT specs and MUST NOT introduce new behavior.
 - Written by:
   - Human CLI
   - Factory worker tools
+- No PR required (operational state only)
+
+### __factory_state__/contexts
+- ContextPackage SSOT (v1.7.0 minimal)
+- Directory: `factory/contexts/`
+- Written by:
+  - Human CLI (`python tools/context_package_cli.py materialize-ssot`)
+- Create-only (immutable): existing documents MUST NOT be modified or deleted
 - No PR required (operational state only)
 
 ### __factory_lock__/*
@@ -138,6 +157,24 @@ gh api -X DELETE repos/:owner/:repo/git/refs/heads/__factory_lock__/<path>
 ```
 
 Use ONLY if automation is fully stopped.
+
+### Common Failure: 403 (PAT insufficient for Git refs)
+
+Symptom:
+- RepoLock acquire fails with `status=403` and/or GitHub reports:
+  - `Resource not accessible by personal access token`
+  - `TOKEN_INSUFFICIENT_FOR_GIT_REFS`
+
+Cause:
+- The token can authenticate (e.g. `GET /user` works) but lacks permission to create Git refs via `POST /repos/:owner/:repo/git/refs`.
+
+Action:
+- Regenerate the token (PAT) and ensure it has repository write permissions sufficient to create refs.
+- Re-run the failed CLI command after updating `GITHUB_TOKEN`.
+
+Notes:
+- This is a token permission issue, not a lock collision.
+- A real lock collision typically appears as `status=422` (already_locked).
 
 ---
 
