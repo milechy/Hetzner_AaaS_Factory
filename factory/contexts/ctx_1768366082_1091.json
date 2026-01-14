@@ -1,0 +1,19 @@
+{
+  "contextId": "ctx_1768366082_1091",
+  "createdAt": "2026-01-14T04:48:02Z",
+  "job": {
+    "base": "main",
+    "kind": "open_pr",
+    "payload": {
+      "body": "ssot enqueue for context materialize",
+      "title": "smoketest-materialize"
+    },
+    "repo": "milechy/Hetzner_AaaS_Factory"
+  },
+  "jobId": "job_1768365902_7abb",
+  "source": {
+    "queueBranch": "__factory_state__/work_queue",
+    "queuePath": "factory/work_queue.jsonl",
+    "startEventId": "evt_1768365902_20b1"
+  }
+}
