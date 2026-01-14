@@ -1,4 +1,4 @@
-name: Work Queue Worker (Option A, v1 - dry-run)
+name: Work Queue Worker (Option A, v1 - start-only)
 
 on:
   schedule:
@@ -14,37 +14,59 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
-  dry_run:
+  start_only:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout (main)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Fetch Work Queue SSOT branch
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Ensure Python deps
         run: |
-          git fetch origin __factory_state__/work_queue
-          git show origin/__factory_state__/work_queue:factory/work_queue.jsonl > /tmp/work_queue.jsonl
-          echo "SSOT tail:"
-          tail -n 30 /tmp/work_queue.jsonl || true
+          python -m pip install --upgrade pip requests
 
-      - name: Derive head job and fail-safe exit if blocked
+      - name: Start head job if queued (SSOT mutation; fail-safe)
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json, sys
+          import json, os, subprocess, sys, time, secrets
+          from datetime import datetime, timezone
           from pathlib import Path
 
-          p = Path("/tmp/work_queue.jsonl")
-          lines = p.read_text(encoding="utf-8").splitlines()
+          from tools.repo_lock import RepoLock, RepoLockError
+
+          QUEUE_BRANCH = "__factory_state__/work_queue"
+          QUEUE_PATH = "factory/work_queue.jsonl"
+
+          def run(cmd):
+            p = subprocess.run(cmd, text=True, capture_output=True)
+            if p.returncode != 0:
+              raise RuntimeError(f"cmd_failed cmd={' '.join(cmd)} rc={p.returncode} stderr={(p.stderr or '').strip()}")
+            return p
+
+          def now_iso():
+            return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+          # Fetch + read SSOT without switching branches first
+          run(["git", "fetch", "origin", QUEUE_BRANCH])
+          raw = run(["git", "show", f"origin/{QUEUE_BRANCH}:{QUEUE_PATH}"]).stdout.splitlines()
 
           events = []
-          for ln in lines:
+          for ln in raw:
             ln = ln.strip()
             if not ln:
               continue
@@ -53,8 +75,8 @@ jobs:
               events.append(obj)
 
           # Fold events
-          order = []          # enqueue order (jobId)
-          state = {}          # jobId -> {"status": "...", "enqueue": {...}, "last": {...}}
+          order = []  # enqueue order
+          state = {}  # jobId -> {"status": "...", "last": {...}}
           terminal = {"done", "fail", "cancel"}
 
           for ev in events:
@@ -62,14 +84,11 @@ jobs:
             jid = ev.get("jobId")
             if not jid:
               continue
-
-            st = state.setdefault(jid, {"status": "unknown", "enqueue": None, "last": None})
-
+            st = state.setdefault(jid, {"status": "unknown", "last": None})
             if t == "enqueue":
               if jid not in order:
                 order.append(jid)
               st["status"] = "queued"
-              st["enqueue"] = ev
               st["last"] = ev
             elif t == "start":
               st["status"] = "running"
@@ -84,7 +103,6 @@ jobs:
               st["status"] = t
               st["last"] = ev
             else:
-              # unknown event type -> fail-safe: do not progress
               st["status"] = "unknown"
               st["last"] = ev
 
@@ -108,11 +126,52 @@ jobs:
             sys.exit(2)
 
           if head_status not in {"queued", "running"}:
-            # fail-safe: unknown/inconsistent
             print(f"[Worker] unexpected head status={head_status}. exit=4 (fail-safe)")
             sys.exit(4)
 
-          # dry-run: do not mutate SSOT
-          print("[Worker] dry-run only. no mutation performed. exit=0")
-          sys.exit(0)
+          # Start-only behavior: only mutate when head is queued
+          if head_status == "running":
+            print("[Worker] head already running. no mutation. exit=0")
+            sys.exit(0)
+
+          # Acquire queue lock and append start
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          token = os.environ.get("GITHUB_TOKEN", "")
+          api_base = "https://api.github.com"
+          sha = os.environ.get("GITHUB_SHA", "") or "0000000"
+
+          lock = RepoLock(repo=repo, api_base=api_base, gh_token=token, namespace="work_queue")
+          try:
+            lock.acquire(sha)
+
+            # Switch to SSOT branch and append
+            run(["git", "checkout", "-B", QUEUE_BRANCH, f"origin/{QUEUE_BRANCH}"])
+
+            path = Path(QUEUE_PATH)
+            evt_id = f"evt_{int(time.time())}_{secrets.token_hex(2)}"
+            start_ev = {
+              "eventId": evt_id,
+              "ts": now_iso(),
+              "actor": "github-actions[bot]",
+              "type": "start",
+              "jobId": head,
+            }
+            with path.open("a", encoding="utf-8") as f:
+              f.write(json.dumps(start_ev, ensure_ascii=False) + "\n")
+
+            run(["git", "add", QUEUE_PATH])
+            run(["git", "commit", "-m", "chore(queue): start head job (worker)"])
+            run(["git", "push", "origin", f"HEAD:{QUEUE_BRANCH}"])
+
+            print(f"[Worker] appended start eventId={evt_id} jobId={head} -> {QUEUE_BRANCH}:{QUEUE_PATH}")
+            sys.exit(0)
+
+          except RepoLockError as e:
+            print(f"[Worker] lock failure: {e}. exit=3")
+            sys.exit(3)
+          finally:
+            try:
+              lock.release()
+            except Exception as e:
+              print(f"[Worker] lock release warning: {e}", file=sys.stderr)
           PY
