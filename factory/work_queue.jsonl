@@ -11,3 +11,5 @@
 {"eventId":"evt_1768107679_2ba3","ts":"2026-01-11T05:01:19Z","actor":"milechy","type":"done","jobId":"job_1768107193_edf9","reason":"smoketest3 complete"}
 {"eventId":"evt_1768107892_d069","ts":"2026-01-11T05:04:52Z","actor":"milechy","type":"start","jobId":"job_1768107317_bd27"}
 {"eventId":"evt_1768107899_e9fe","ts":"2026-01-11T05:04:59Z","actor":"milechy","type":"done","jobId":"job_1768107317_bd27","reason":"smoketest4 complete"}
+{"eventId": "evt_1768365902_2c78", "ts": "2026-01-14T04:45:02Z", "actor": "milechy", "type": "enqueue", "jobId": "job_1768365902_7abb", "job": {"kind": "open_pr", "repo": "milechy/Hetzner_AaaS_Factory", "base": "main", "payload": {"title": "smoketest-materialize", "body": "ssot enqueue for context materialize"}}}
+{"eventId": "evt_1768365902_20b1", "ts": "2026-01-14T04:45:02Z", "actor": "milechy", "type": "start", "jobId": "job_1768365902_7abb"}
