@@ -47,6 +47,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set +e
           python - <<'PY'
           import json, os, subprocess, sys, time, secrets
           from datetime import datetime, timezone
@@ -187,3 +188,9 @@ jobs:
             except Exception as e:
               print(f"[Worker] lock release warning: {e}", file=sys.stderr)
           PY
+          rc=$?
+          if [ "$rc" -eq 2 ]; then
+            echo "[Worker] exit=2 is human gate (blocked). Treat as success." >&2
+            exit 0
+          fi
+          exit "$rc"
