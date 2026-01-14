@@ -13,3 +13,4 @@
 {"eventId":"evt_1768107899_e9fe","ts":"2026-01-11T05:04:59Z","actor":"milechy","type":"done","jobId":"job_1768107317_bd27","reason":"smoketest4 complete"}
 {"eventId": "evt_1768365902_2c78", "ts": "2026-01-14T04:45:02Z", "actor": "milechy", "type": "enqueue", "jobId": "job_1768365902_7abb", "job": {"kind": "open_pr", "repo": "milechy/Hetzner_AaaS_Factory", "base": "main", "payload": {"title": "smoketest-materialize", "body": "ssot enqueue for context materialize"}}}
 {"eventId": "evt_1768365902_20b1", "ts": "2026-01-14T04:45:02Z", "actor": "milechy", "type": "start", "jobId": "job_1768365902_7abb"}
+{"eventId": "evt_1768366290_a19c", "ts": "2026-01-14T04:51:30Z", "actor": "milechy", "type": "done", "jobId": "job_1768365902_7abb", "reason": "context materialized"}
