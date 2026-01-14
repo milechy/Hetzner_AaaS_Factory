@@ -1,5 +1,3 @@
-
-
 # Work Queue Operations v1
 # SSOT – Authoritative, Binding (v1.5.x)
 
@@ -164,9 +162,57 @@ Normative exit codes:
 
 ---
 
-## 5. Troubleshooting
+## 5. Scheduled Worker (Option A: GitHub Actions)
 
-### 5.1 "unknown_jobId"
+この節は Option A（GitHub Actions による定期実行/dispatch 実行）で Work Queue を進めるための運用手順である。
+目的は「自動で進められるところは進める」だが、**Fail-safe と Human Gate を優先**し、
+未知状態では停止する。
+
+### 5.1 実行モデル
+
+- Trigger: `schedule`（例: 5〜15分間隔）または `repository_dispatch`
+- 実行は **単発のジョブ** とし、常駐プロセスは採用しない
+- 多重起動防止:
+  - GitHub Actions の `concurrency` を使い、同一ワークフローは同時に1つだけ実行
+
+### 5.2 ワーカが行う最小処理（推奨順）
+
+1) SSOT を読む（`__factory_state__/work_queue` / `factory/work_queue.jsonl`）
+2) head job を導出する
+3) head が `blocked` の場合は **exit=2**（人間判断待ち）
+4) head が `queued` の場合は `start` を append（Work Queue CLI を利用）
+5) job kind に応じた処理を実行
+6) 成功なら `done`、失敗なら `fail` を append
+
+### 5.3 ロック順序（必須）
+
+- Queue lock → RepoLock の順に取得する。
+  - Queue lock（`__factory_lock__/work_queue`）: Work Queue SSOT の read/append を直列化
+  - RepoLock（例: `__factory_lock__/open_pr`）: 対象 repo の書き込みを直列化
+
+### 5.4 Exit code と挙動
+
+- `2`: blocked（head が blocked。ワーカは進めない）
+- `3`: lock failure（Queue lock / RepoLock が取得できない）
+- `4`: invariant/schema violation（不整合。ワーカは進めない）
+
+### 5.5 例: GitHub Actions からの実行（概念）
+
+Runbook/Operations は **秘密情報を文面に埋め込まない**。token は GitHub Secrets を使う。
+
+- 例（概念）:
+  - `python -m tools.work_queue_cli transition-ssot --actor github-actions[bot] --type start --job-id <jobId>`
+  - `python tools/open_pr_cli.py ...`（Human Gate により block されることがある）
+
+注意:
+- `unblock` は人間のみ（bot が自動解除してはならない）
+- 失敗時は “止まる” が正しい（再試行は最小・バックオフ）
+
+---
+
+## 6. Troubleshooting
+
+### 6.1 "unknown_jobId"
 
 Cause:
 - You passed the wrong value (missing `job_` prefix, truncated, etc.).
@@ -174,7 +220,7 @@ Cause:
 Action:
 - Re-copy jobId from SSOT JSONL line: `"jobId":"job_..."`.
 
-### 5.2 "non_head_job_mutation"
+### 6.2 "non_head_job_mutation"
 
 Cause:
 - Attempted to transition a non-head job.
@@ -182,7 +228,7 @@ Cause:
 Action:
 - Transition the current head job first (usually complete or unblock it).
 
-### 5.3 "human_only"
+### 6.3 "human_only"
 
 Cause:
 - `actor` is `github-actions[bot]`.
@@ -190,7 +236,7 @@ Cause:
 Action:
 - Re-run with your human login.
 
-### 5.4 SSOT branch update conflicts
+### 6.4 SSOT branch update conflicts
 
 Symptom:
 - Push rejected due to remote moving (someone appended events).
@@ -211,9 +257,9 @@ git reset --hard origin/__factory_state__/work_queue
 
 ---
 
-## 6. Emergency Procedures
+## 7. Emergency Procedures
 
-### 6.1 Queue is corrupted (invalid JSONL line)
+### 7.1 Queue is corrupted (invalid JSONL line)
 
 Policy:
 - Do not rewrite SSOT history without explicit human decision.
@@ -225,7 +271,7 @@ Immediate containment:
 Preferred repair:
 - Append a `fail` event for the head job (if possible) and re-enqueue.
 
-### 6.2 Operator mistake (wrong transition)
+### 7.2 Operator mistake (wrong transition)
 
 Policy:
 - Do not delete lines.
@@ -236,7 +282,7 @@ Repair:
 
 ---
 
-## 7. Release/Tagging Notes (v1.5.x)
+## 8. Release/Tagging Notes (v1.5.x)
 
 - Tags/releases are separate from “code landing”.
 - Changelog updates must go via `release/*-changelog` PR flow.
@@ -244,7 +290,7 @@ Repair:
 
 ---
 
-## 8. Appendix: Quick Commands
+## 9. Appendix: Quick Commands
 
 ```bash
 # Show queue tail

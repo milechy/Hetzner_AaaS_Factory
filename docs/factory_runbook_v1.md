@@ -240,103 +240,35 @@ If NO → STOP.
 
 ---
 
-## 9. v1.5.x 運用自動化（worker常駐化・監視）検討メモ（非拘束）
+## 9. 運用自動化（Option A: GitHub Actions Scheduled Worker）
 
-この節は **検討メモ（Design Notes）** であり、SSOT仕様・ロードマップの **拘束力を持たない**。
-本節の記載は **v1.5.x の挙動変更を許可しない**（実装は別PR・別SSOT・別CHANGELOGで明示しない限り禁止）。
+この節は **運用ガイダンス（Operations）** であり、設計メモではない。
+ここで述べる運用は **v1.7.x の SSOT 運用（Work Queue / RepoLock）** の範囲に限定し、
+**Human Gate（block/unblock の人間判断）** と **Fail-safe** を維持する。
 
-### 9.1 背景と目的
+### 9.1 目的
 
-v1.5.x では Work Queue / RepoLock / Open-PR の安全ガードが揃ったが、運用上は次が課題になる:
+- キュー処理の「手動トリガ」依存を減らし、運用の抜け漏れを減らす
+- blocked / lock / API 障害などを早期に検知し、停止（fail-safe）できるようにする
 
-- キュー処理の「手動トリガ」依存（継続運用では手間・抜けが出る）
-- 異常（ブロック・ロック残留・API障害）の検知が遅れる
-- ワーカの稼働状態が外形監視できない
+### 9.2 採用方針（Option A）
 
-目的（運用面）:
+- GitHub Actions の **schedule** もしくは **repository_dispatch** を入口にし、
+  **単一のワーカ実行**（同時多重起動しない）で Work Queue を進める
+- 実際の手順・コマンド・チェックリストは **Work Queue Operations** に集約する（Runbook は方針のみ）
 
-- **常駐ワーカ** または **定期ポーリング** により「キューが動かない」を減らす
-- **監視/アラート** により「止まった/詰まった」を早期検知
-- ただし **Fail-safe（停止優先）** と **Human Gate** を維持する
+参照:
+- `docs/work_queue_operations_v1.md`（“Scheduled Worker (Option A)” 節）
 
-### 9.2 非目標（v1.5.x では禁止）
+### 9.3 ハード要件（再掲）
 
-- 自動で PR をマージする
-- Human Gate をバイパスする
-- 並列実行（複数ワーカ/複数ジョブ同時）
-- マルチレポ同時オーケストレーション
-- ContextPackage の runtime 利用（v1.6.0 design-only）
-
-### 9.3 運用自動化の実装候補（比較）
-
-#### Option A: GitHub Actions（Scheduled / Repository Dispatch）
-
-- 長所: 追加インフラ不要、監査ログがGitHubに残る
-- 短所: 実行時間・頻度制約、ジョブが多いとレート/コスト/待ちが増える
-- 適用: **低頻度で十分**（例: 5〜15分間隔のポーリング）な場合
-
-#### Option B: Self-hosted Runner（常駐ワーカ）
-
-- 長所: 常時稼働、即時反応、重い処理にも耐える
-- 短所: ランナーの運用責任（再起動・更新・セキュリティ）
-- 適用: 「キューを常に回したい」「即時性が必要」な場合
-
-#### Option C: ローカル常駐（launchd/systemd）+ 手動操作の補助
-
-- 長所: 最小構成で常駐/監視を作れる（Mac/Hetznerどちらでも）
-- 短所: 環境依存、属人化しやすい
-- 適用: 試験運用（PoC）向き
-
-### 9.4 ワーカ常駐化で守るべきハード要件（運用）
-
-- **単一ワーカ原則**: 同時に2つのワーカが動作してはならない（Work Queue の single-running と整合）
-- **ロック順序**: 
+- **単一ワーカ原則**（同時に2つのワーカが動作してはならない）
+- **ロック順序**:
   1) Queue lock（`__factory_lock__/work_queue`）で SSOT 読み書きを直列化
   2) RepoLock（`__factory_lock__/open_pr` 等）で対象リポジトリの書き込みを直列化
-- **Head-of-queue のみ mutate**: `transition-ssot` は常に head を検証し、非headは FAIL（exit=4）
-- **Fail-safe**: GitHub API が不安定 / 予期せぬ状態では「止まる」。再試行は限定的（バックオフ）
-- **Human Gate 維持**: `block` → `unblock` は人間が判断（botによる自動解除は禁止）
-- **監査可能性**: すべての操作は JSONL 追記 + key=value ログで追跡できる
-
-### 9.5 監視（Observability）設計案
-
-最小監視（推奨）:
-
-- **Queue health**
-  - head job の状態（queued/running/blocked）
-  - 最終イベント時刻（staleness）
-  - running が長時間継続（例: > 30分）
-  - blocked が長時間継続（例: > 60分）
-
-- **RepoLock health**
-  - open_pr / work_queue namespace のロック残留
-  - TTL を過ぎてもロックが解放されない（reap が効かない）
-
-- **Worker health**
-  - 実行ループの生存（heartbeat）
-  - 異常終了回数（crash loop）
-
-通知チャネル例（運用で選択）:
-
-- GitHub Issue 作成（最小のエスカレーション）
-- Slack/Webhook（外部通知）
-- Email（代替）
-
-注意: 通知実装は **秘密情報を含めない**。token/URL埋め込みは禁止。
-
-### 9.6 期待する運用フロー（例）
-
-- ワーカは一定間隔で SSOT（`__factory_state__/work_queue`）を読み、head のみを処理対象とする
-- `blocked` を検知したら exit=2 で停止（自動解除はしない）
-- `RepoLock` が取れない場合は exit=3 で停止（TTL待ち or 人間判断）
-- 異常系では Issue / 通知を発行して人間に引き継ぐ
-
-### 9.7 変更管理（重要）
-
-- 本節の内容を実装に落とす場合は、必ず以下を満たす:
-  - Roadmap（SSOT）で **Allowed** に入っていること
-  - 仕様（SSOT）を先に確定すること
-  - 変更は PR 経由で `main` に入り、必要なら CHANGELOG を伴うこと
+- **Head-of-queue のみ mutate**（非headは FAIL: exit=4）
+- **Human Gate 維持**（block → unblock は人間のみ）
+- **Fail-safe**（未知/不整合/外部障害では進めず停止）
 
 ---
 
