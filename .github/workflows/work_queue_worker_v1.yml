@@ -48,6 +48,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
+          git fetch origin __factory_state__/work_queue
+          python factory/ssot_validate.py --kind queue --path <(git show origin/__factory_state__/work_queue:factory/work_queue.jsonl)
           python - <<'PY'
           import json, os, subprocess, sys, time, secrets
           from datetime import datetime, timezone
