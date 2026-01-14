@@ -1,0 +1,218 @@
+name: Work Queue Executor (Option A, v1)
+
+on:
+  workflow_dispatch: {}
+  repository_dispatch:
+    types: [work-queue-exec]
+
+concurrency:
+  group: work-queue-executor
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  exec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Ensure Python deps
+        run: |
+          python -m pip install --upgrade pip requests
+
+      - name: Configure git identity (for SSOT commits)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Execute head job if running (SSOT mutation)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys, time, secrets
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import requests
+
+          QUEUE_BRANCH = "__factory_state__/work_queue"
+          QUEUE_PATH = "factory/work_queue.jsonl"
+
+          def run(cmd):
+            p = subprocess.run(cmd, text=True, capture_output=True)
+            if p.returncode != 0:
+              raise RuntimeError(f"cmd_failed cmd={' '.join(cmd)} rc={p.returncode} stderr={(p.stderr or '').strip()}")
+            return p
+
+          def now_iso():
+            return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+          # Read SSOT
+          run(["git", "fetch", "origin", QUEUE_BRANCH])
+          raw = run(["git", "show", f"origin/{QUEUE_BRANCH}:{QUEUE_PATH}"]).stdout.splitlines()
+
+          events = []
+          for ln in raw:
+            ln = ln.strip()
+            if not ln:
+              continue
+            obj = json.loads(ln)
+            if isinstance(obj, dict) and obj.get("type") != "__init__":
+              events.append(obj)
+
+          # Fold events
+          order = []
+          state = {}  # jobId -> {"status": str, "last": ev, "enqueue": ev}
+          terminal = {"done", "fail", "cancel"}
+
+          for ev in events:
+            t = ev.get("type")
+            jid = ev.get("jobId")
+            if not jid:
+              continue
+            st = state.setdefault(jid, {"status": "unknown", "last": None, "enqueue": None})
+            if t == "enqueue":
+              if jid not in order:
+                order.append(jid)
+              st["status"] = "queued"
+              st["last"] = ev
+              st["enqueue"] = ev
+            elif t == "start":
+              st["status"] = "running"
+              st["last"] = ev
+            elif t in terminal:
+              st["status"] = t
+              st["last"] = ev
+            else:
+              st["last"] = ev
+
+          # Determine head non-terminal
+          head = None
+          for jid in order:
+            s = state.get(jid, {}).get("status")
+            if s and s not in terminal:
+              head = jid
+              break
+
+          if not head:
+            print("[Executor] head=None. exit=0")
+            sys.exit(0)
+
+          head_status = state[head]["status"]
+          print(f"[Executor] head_job_id={head} status={head_status}")
+
+          # executor は running の head だけ処理（start-only の後）
+          if head_status != "running":
+            print("[Executor] head not running; nothing to do. exit=0")
+            sys.exit(0)
+
+          enqueue_ev = state[head].get("enqueue") or {}
+          job = (enqueue_ev.get("job") or {})
+          kind = job.get("kind")
+          repo = (job.get("repo") or os.environ.get("GITHUB_REPOSITORY", ""))
+
+          # Idempotency: 既に done/fail があればここに来ないが、念のため二重防止
+          # （state fold が最後の状態なので、running のままなら done/fail は無い想定）
+
+          # Switch to SSOT branch for mutation
+          run(["git", "checkout", "-B", QUEUE_BRANCH, f"origin/{QUEUE_BRANCH}"])
+          path = Path(QUEUE_PATH)
+
+          def append_event(ev):
+            with path.open("a", encoding="utf-8") as f:
+              f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+
+          def commit_push(msg):
+            run(["git", "add", QUEUE_PATH])
+            run([
+              "git",
+              "-c", "user.name=github-actions[bot]",
+              "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+              "commit", "-m", msg,
+            ])
+            run(["git", "push", "origin", f"HEAD:{QUEUE_BRANCH}"])
+
+          def fail(reason):
+            ev = {
+              "eventId": f"evt_{int(time.time())}_{secrets.token_hex(2)}",
+              "ts": now_iso(),
+              "actor": "github-actions[bot]",
+              "type": "fail",
+              "jobId": head,
+              "reason": reason,
+            }
+            append_event(ev)
+            commit_push(f"chore(queue): fail head job (executor)")
+            print(f"[Executor] fail jobId={head} reason={reason}")
+            sys.exit(1)
+
+          def done(reason):
+            ev = {
+              "eventId": f"evt_{int(time.time())}_{secrets.token_hex(2)}",
+              "ts": now_iso(),
+              "actor": "github-actions[bot]",
+              "type": "done",
+              "jobId": head,
+              "reason": reason,
+            }
+            append_event(ev)
+            commit_push(f"chore(queue): done head job (executor)")
+            print(f"[Executor] done jobId={head} reason={reason}")
+            sys.exit(0)
+
+          if kind != "open_pr":
+            fail(f"unsupported kind={kind}")
+
+          payload = (job.get("payload") or {})
+          title = payload.get("title") or "(no title)"
+          body = payload.get("body") or ""
+          base = job.get("base") or "main"
+
+          # 重要: open_pr には通常 head ブランチが必要。
+          # ここでは payload.head を必須にする（無い場合 fail）
+          head_ref = payload.get("head")
+          if not head_ref:
+            fail("open_pr payload.head is required (e.g. 'feature/xxx')")
+
+          token = os.environ.get("GITHUB_TOKEN", "")
+          api = "https://api.github.com"
+          url = f"{api}/repos/{repo}/pulls"
+          r = requests.post(
+            url,
+            headers={
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+            },
+            json={
+              "title": title,
+              "head": head_ref,
+              "base": base,
+              "body": body,
+            },
+            timeout=30,
+          )
+
+          if r.status_code == 201:
+            pr = r.json()
+            done(f"opened PR #{pr.get('number')} head={head_ref} base={base}")
+          elif r.status_code == 422:
+            # 既に PR がある等
+            done(f"open_pr returned 422 (likely already exists): head={head_ref} base={base}")
+          else:
+            fail(f"open_pr failed status={r.status_code} body={r.text[:300]}")
+          PY
