@@ -1,6 +1,5 @@
 {"type":"__init__","note":"SSOT file placeholder; events start below"}
 {"eventId":"evt_1768100234_cbb3","ts":"2026-01-11T02:57:14Z","actor":"milechy","type":"enqueue","jobId":"job_1768100234_448a","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest","body":"ssot io"}}}
-<<<<<<< Updated upstream
 {"eventId":"evt_1768106571_97df","ts":"2026-01-11T04:42:51Z","actor":"milechy","type":"start","jobId":"job_1768100234_448a"}
 {"eventId":"evt_1768106692_8872","ts":"2026-01-11T04:44:52Z","actor":"milechy","type":"enqueue","jobId":"job_1768106692_9216","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest2","body":"head-only check"}}}
 {"eventId":"evt_1768106764_acb3","ts":"2026-01-11T04:46:04Z","actor":"milechy","type":"done","jobId":"job_1768100234_448a","reason":"smoketest complete"}
@@ -18,6 +17,4 @@
 {"eventId": "evt_1768376841_ef9b", "ts": "2026-01-14T07:47:21Z", "actor": "milechy", "type": "enqueue", "jobId": "job_1768376841_9c6d", "job": {"kind": "open_pr", "repo": "milechy/Hetzner_AaaS_Factory", "base": "main", "payload": {"title": "worker-start-test", "body": "enqueue only; worker should append start"}}}
 {"eventId": "evt_1768378448_0463", "ts": "2026-01-14T08:14:08Z", "actor": "github-actions[bot]", "type": "start", "jobId": "job_1768376841_9c6d"}
 {"eventId": "evt_1768388060_1808", "ts": "2026-01-14T10:54:20Z", "actor": "github-actions[bot]", "type": "fail", "jobId": "job_1768376841_9c6d", "reason": "open_pr payload.head is required (e.g. 'feature/xxx')"}
-=======
-{"eventId":"evt_1768381200_exec1","ts":"2026-01-14T11:00:00Z","actor":"milechy","type":"enqueue","jobId":"job_1768381200_exec1","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"executor-ssot-branch-test","body":"enqueue on SSOT queue; executor should append start/done on __factory_state__/work_queue"}}}
->>>>>>> Stashed changes
+{"eventId":"evt_1768381200_exec1","ts":"2026-01-14T11:00:00Z","actor":"milechy","type":"enqueue","jobId":"job_1768381200_exec1","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"executor-ssot-branch-test","body":"enqueue on SSOT queue; executor should append start/done on __factory_state__/work_queue","head":"pr/executor-ssot-branch-test"}}}
