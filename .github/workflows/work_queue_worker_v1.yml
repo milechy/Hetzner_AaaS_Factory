@@ -1,0 +1,118 @@
+name: Work Queue Worker (Option A, v1 - dry-run)
+
+on:
+  schedule:
+    # まずは低頻度（例: 15分）。安定したら 5〜10分へ。
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+  repository_dispatch:
+    types: [work-queue-worker]
+
+concurrency:
+  # 同一ワークフローの多重起動を禁止（単一ワーカ原則）
+  group: work-queue-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dry_run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch Work Queue SSOT branch
+        run: |
+          git fetch origin __factory_state__/work_queue
+          git show origin/__factory_state__/work_queue:factory/work_queue.jsonl > /tmp/work_queue.jsonl
+          echo "SSOT tail:"
+          tail -n 30 /tmp/work_queue.jsonl || true
+
+      - name: Derive head job and fail-safe exit if blocked
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          p = Path("/tmp/work_queue.jsonl")
+          lines = p.read_text(encoding="utf-8").splitlines()
+
+          events = []
+          for ln in lines:
+            ln = ln.strip()
+            if not ln:
+              continue
+            obj = json.loads(ln)
+            if isinstance(obj, dict) and obj.get("type") != "__init__":
+              events.append(obj)
+
+          # Fold events
+          order = []          # enqueue order (jobId)
+          state = {}          # jobId -> {"status": "...", "enqueue": {...}, "last": {...}}
+          terminal = {"done", "fail", "cancel"}
+
+          for ev in events:
+            t = ev.get("type")
+            jid = ev.get("jobId")
+            if not jid:
+              continue
+
+            st = state.setdefault(jid, {"status": "unknown", "enqueue": None, "last": None})
+
+            if t == "enqueue":
+              if jid not in order:
+                order.append(jid)
+              st["status"] = "queued"
+              st["enqueue"] = ev
+              st["last"] = ev
+            elif t == "start":
+              st["status"] = "running"
+              st["last"] = ev
+            elif t == "block":
+              st["status"] = "blocked"
+              st["last"] = ev
+            elif t == "unblock":
+              st["status"] = "running"
+              st["last"] = ev
+            elif t in terminal:
+              st["status"] = t
+              st["last"] = ev
+            else:
+              # unknown event type -> fail-safe: do not progress
+              st["status"] = "unknown"
+              st["last"] = ev
+
+          # Determine head non-terminal
+          head = None
+          for jid in order:
+            s = state.get(jid, {}).get("status")
+            if s and s not in terminal:
+              head = jid
+              break
+
+          if not head:
+            print("[Worker] head=None (queue empty or all terminal). exit=0")
+            sys.exit(0)
+
+          head_status = state[head]["status"]
+          print(f"[Worker] head_job_id={head} status={head_status}")
+
+          if head_status == "blocked":
+            print("[Worker] head is blocked. exit=2 (human gate)")
+            sys.exit(2)
+
+          if head_status not in {"queued", "running"}:
+            # fail-safe: unknown/inconsistent
+            print(f"[Worker] unexpected head status={head_status}. exit=4 (fail-safe)")
+            sys.exit(4)
+
+          # dry-run: do not mutate SSOT
+          print("[Worker] dry-run only. no mutation performed. exit=0")
+          sys.exit(0)
+          PY
