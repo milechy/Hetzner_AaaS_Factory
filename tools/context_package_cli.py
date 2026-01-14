@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import tools.context_package as context_package
 from tools.repo_lock import RepoLock, RepoLockError
@@ -186,6 +186,42 @@ def _push_contexts_branch() -> None:
     _run_check(["git", "push", "-u", "origin", f"HEAD:{CONTEXTS_SSOT_BRANCH}"])
 
 
+def _normalize_queue_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize Work Queue events for downstream consumers.
+
+    Work Queue stores the enqueued job payload under `event["job"]`.
+    ContextPackage v1.7.0 validation expects the following fields on the
+    enqueue event itself:
+      - kind, repo, base, payload
+
+    We mirror these fields from `job` to the event root.
+
+    Notes:
+    - Do not mutate the input dicts in-place; return normalized copies.
+    - Prefer values from `job` whenever present (even if the root already has
+      empty/None values).
+    """
+
+    out: List[Dict[str, Any]] = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+
+        t = ev.get("type") or ev.get("eventType")
+        ev2: Dict[str, Any] = dict(ev)
+
+        if t == "enqueue" and isinstance(ev.get("job"), dict):
+            job = ev["job"]
+            # Always mirror required fields (even if missing in `job`) so the
+            # downstream validator can reliably check presence on the enqueue event.
+            for k in ("kind", "repo", "base", "payload"):
+                ev2[k] = job.get(k)
+
+        out.append(ev2)
+
+    return out
+
+
 def _parse_queue_events_from_ssot() -> List[Dict[str, Any]]:
     _git_fetch(QUEUE_SSOT_BRANCH)
     raw = _git_show(f"origin/{QUEUE_SSOT_BRANCH}:{QUEUE_SSOT_PATH}")
@@ -200,7 +236,7 @@ def _parse_queue_events_from_ssot() -> List[Dict[str, Any]]:
             raise SchemaError("jsonl_line_must_be_object")
         events.append(obj)
 
-    return events
+    return _normalize_queue_events(events)
 
 
 def _make_default_context_id() -> str:
@@ -239,8 +275,8 @@ def _job_is_blocked(events: List[Dict[str, Any]], job_id: str) -> bool:
     return blocked
 
 
-def _find_existing_context_by_job_id(job_id: str) -> str:
-    base = Path("factory") / "contexts"
+def _find_existing_context_by_job_id(job_id: str, *, base_dir: Optional[Path] = None) -> str:
+    base = (base_dir or (Path("factory") / "contexts"))
     if not base.exists():
         return ""
     for p in sorted(base.glob("*.json")):
@@ -275,6 +311,21 @@ def _git_rev_parse(ref: str) -> str:
     if p.returncode != 0:
         return ""
     return (p.stdout or "").strip()
+
+
+def _ensure_clean_worktree() -> None:
+    """Fail fast if the working tree has local modifications.
+
+    This CLI switches branches (`__factory_state__/contexts`) and commits.
+    If the worktree is dirty, the checkout can fail in confusing ways.
+    """
+
+    p = _run(["git", "status", "--porcelain"])
+    if p.returncode != 0:
+        raise RuntimeError("git_status_failed")
+
+    if (p.stdout or "").strip():
+        raise RuntimeError("dirty_worktree")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -343,6 +394,11 @@ def main() -> None:
         queue_events = _parse_queue_events_from_ssot()
         state = derive_queue_state(queue_events)
 
+        head_job = _queue_head_job_id(queue_events)
+        if head_job and head_job == job_id and _job_is_blocked(queue_events, job_id):
+            print(f"[ContextPackage] exit=2 reason=head_blocked jobId={job_id}", file=sys.stderr)
+            raise SystemExit(EXIT_BLOCKED)
+
         cfg = _get_repo_config(args)
         if not cfg.get("repo") or not cfg.get("gh_token"):
             print("[ContextPackage] exit=4 reason=missing_repo_lock_config", file=sys.stderr)
@@ -366,23 +422,23 @@ def main() -> None:
             print(f"[RepoLock] exit=3 reason=locked detail={e}", file=sys.stderr)
             raise SystemExit(EXIT_LOCK_FAIL)
 
-        head_job = _queue_head_job_id(queue_events)
-        if head_job and head_job == job_id and _job_is_blocked(queue_events, job_id):
-            print(f"[ContextPackage] exit=2 reason=head_blocked jobId={job_id}", file=sys.stderr)
-            raise SystemExit(EXIT_BLOCKED)
+        # Removed duplicated blocked-head check here per instructions
 
-        doc = build_context_package(
-            context_id=context_id,
-            created_at=created_at,
-            inputs=ContextBuildInputs(
-                queue_events=queue_events,
-                job_id=job_id,
-                derived_state=state,
-                require_head_only=True,
-            ),
+        inputs = ContextBuildInputs(
+            queue_events=queue_events,
+            job_id=job_id,
+            derived_state=state,
+            require_head_only=True,
         )
 
+        # Fail-fast before taking a lock / switching branches.
+        _ensure_clean_worktree()
+
+        doc = build_context_package(context_id=context_id, created_at=created_at, inputs=inputs)
+
         _switch_to_contexts_branch()
+
+        _ensure_clean_worktree()
 
         existing_ctx = _find_existing_context_by_job_id(job_id)
         if existing_ctx:
@@ -423,6 +479,13 @@ def main() -> None:
             file=sys.stderr,
         )
         raise SystemExit(EXIT_INVARIANT)
+    except RuntimeError as e:
+        # Deterministic failures from helper checks
+        msg = str(e)
+        if msg in ("dirty_worktree", "git_status_failed"):
+            print(f"[ContextPackage] exit=4 reason={msg}", file=sys.stderr)
+            raise SystemExit(EXIT_INVARIANT)
+        raise
     except SystemExit:
         raise
     except Exception as e:
@@ -430,7 +493,7 @@ def main() -> None:
         raise SystemExit(EXIT_INVARIANT)
     finally:
         try:
-            if "lock" in locals():
+            if "lock" in locals() and lock is not None:
                 lock.release()
         except Exception:
             pass
