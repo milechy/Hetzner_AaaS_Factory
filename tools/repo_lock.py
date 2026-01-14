@@ -4,7 +4,7 @@ Fail-fast distributed lock for OpenPR execution on the same repo.
 
 Implementation:
 - Lock is represented as a Git ref under:
-    refs/heads/__factory_lock__/open_pr/<epoch_seconds>
+    refs/heads/__factory_lock__/<namespace>/<epoch_seconds> (default namespace is "open_pr")
 - Acquire is fail-fast when an active lock exists.
 - Optional TTL: expired locks are reaped (deleted) before acquiring.
 
@@ -57,6 +57,11 @@ class RepoLock:
     repo: str
     api_base: str
     gh_token: str
+
+    # Logical lock namespace under refs/heads/__factory_lock__/<namespace>/...
+    # Defaults to "open_pr" for backward compatibility.
+    namespace: str = "open_pr"
+
     ttl_seconds: int = 0
 
     # Set after acquire
@@ -65,7 +70,7 @@ class RepoLock:
     @property
     def lock_prefix(self) -> str:
         # Logical namespace; stored as refs/heads/... in GitHub.
-        return "refs/heads/__factory_lock__/open_pr"
+        return f"refs/heads/__factory_lock__/{self.namespace}"
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -77,11 +82,11 @@ class RepoLock:
         # GitHub API expects the path without the leading "refs/".
         # matching-refs supports prefixes such as "heads/<prefix>".
         return (
-            f"{self.api_base}/repos/{self.repo}/git/matching-refs/heads/__factory_lock__/open_pr"
+            f"{self.api_base}/repos/{self.repo}/git/matching-refs/heads/__factory_lock__/{self.namespace}"
         )
 
     def _delete_ref_url(self, full_ref: str) -> str:
-        # DELETE expects e.g. heads/__factory_lock__/open_pr/1234
+        # DELETE expects e.g. heads/__factory_lock__/<namespace>/1234
         ref_path = full_ref
         if ref_path.startswith("refs/"):
             ref_path = ref_path[len("refs/") :]
@@ -91,7 +96,7 @@ class RepoLock:
         return f"{self.api_base}/repos/{self.repo}/git/refs"
 
     def _parse_epoch_from_ref(self, ref: str) -> Optional[int]:
-        # Expect refs/heads/__factory_lock__/open_pr/<epoch>
+        # Expect refs/heads/__factory_lock__/<namespace>/<epoch>
         parts = ref.split("/")
         if not parts:
             return None
