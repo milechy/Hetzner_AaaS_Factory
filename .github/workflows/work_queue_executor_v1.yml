@@ -46,6 +46,15 @@ jobs:
         run: |
           git fetch origin __factory_state__/work_queue
           python factory/ssot_validate.py --kind queue --path <(git show origin/__factory_state__/work_queue:factory/work_queue.jsonl)
+          git fetch origin __factory_state__/contexts
+          python factory/ssot_validate.py --kind contexts --path <(git show origin/__factory_state__/contexts:factory/contexts.jsonl)
+
+          # Validate materialized context artifacts (ctx_*.json) from the contexts SSOT branch.
+          # We must read files from the SSOT branch, not from main, so use a temporary worktree.
+          git worktree remove --force /tmp/contexts_ssot 2>/dev/null || true
+          git worktree add --detach /tmp/contexts_ssot origin/__factory_state__/contexts
+          python factory/ssot_validate.py --kind contexts_dir --path /tmp/contexts_ssot/factory/contexts
+          git worktree remove --force /tmp/contexts_ssot || true
           python - <<'PY'
           import json, os, subprocess, sys, time, secrets
           from datetime import datetime, timezone

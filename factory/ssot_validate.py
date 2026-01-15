@@ -5,6 +5,7 @@ from pathlib import Path
 ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 CTX_ID_RE = re.compile(r"^ctx_\d+_[0-9a-f]{4}$")
 
+
 def fail(msg: str, line_no: int | None = None, line: str | None = None) -> None:
     prefix = f"[ssot-validate] "
     if line_no is not None:
@@ -13,6 +14,15 @@ def fail(msg: str, line_no: int | None = None, line: str | None = None) -> None:
     if line is not None:
         sys.stderr.write(f"[ssot-validate] line_text={line[:500]}\n")
     raise SystemExit(2)
+
+# New helper function: warn
+def warn(msg: str, line_no: int | None = None, line: str | None = None) -> None:
+    prefix = "[ssot-validate] "
+    if line_no is not None:
+        prefix += f"line={line_no} "
+    sys.stderr.write(prefix + "WARN " + msg + "\n")
+    if line is not None:
+        sys.stderr.write(f"[ssot-validate] line_text={line[:500]}\n")
 
 def require(obj, key, *, line_no: int):
     if key not in obj or obj[key] in (None, ""):
@@ -48,7 +58,7 @@ def validate_queue(obj, *, line_no: int):
             if not isinstance(payload, dict):
                 fail("job.payload must be object", line_no=line_no)
             if not payload.get("head"):
-                fail("open_pr payload.head is required (e.g. 'feature/xxx')", line_no=line_no)
+                warn("open_pr payload.head is missing (legacy enqueue); executor will fail this job", line_no=line_no)
 
     elif t in ("done", "fail", "cancel"):
         if not obj.get("reason"):
@@ -172,5 +182,7 @@ def main():
     print("[ssot-validate] OK")
     return 0
 
+
 if __name__ == "__main__":
     raise SystemExit(main())
+
