@@ -1,2 +1,3 @@
 {"type":"__init__","note":"SSOT file placeholder; events start below"}
 {"eventId":"evt_1768100234_cbb3","ts":"2026-01-11T02:57:14Z","actor":"milechy","type":"enqueue","jobId":"job_1768100234_448a","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"smoketest","body":"ssot io"}}}
+{"eventId":"evt_1768381200_exec1","ts":"2026-01-14T11:00:00Z","actor":"milechy","type":"enqueue","jobId":"job_1768381200_exec1","job":{"kind":"open_pr","repo":"milechy/Hetzner_AaaS_Factory","base":"main","payload":{"title":"executor-ssot-branch-test","body":"enqueue on SSOT queue; executor should append start/done on __factory_state__/work_queue"}}}
