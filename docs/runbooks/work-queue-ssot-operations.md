@@ -2,15 +2,15 @@
 
 This runbook is the authoritative procedure for mutating SSOT JSONL files.
 
-- Work Queue SSOT: `factory/work_queue.jsonl` on branch `__factory_state__/work_queue`
-- Contexts SSOT: `factory/contexts.jsonl` on branch `__factory_state__/contexts`
+- Work Queue SSOT (JSONL): `factory/work_queue.jsonl` on branch `__factory_state__/work_queue`
+- Contexts SSOT (JSONL + artifacts): `factory/contexts.jsonl` (event log) + `factory/contexts/*.json` (materialized context artifacts) on branch `__factory_state__/contexts`
 
 ## Non-negotiables
 
 - SSOT files are **append-only** (one JSON object per line)
 - History must be **linear** (no merge/rebase/cherry-pick)
 - SSOT mutations must be done from **dedicated git worktrees**
-- Always `git pull --ff-only` in the SSOT worktree right before appending
+- Always sync the SSOT worktree right before appending (SSOT worktrees are often detached HEAD: use `git fetch` + `git reset --hard`; do not use `git pull` inside SSOT worktrees)
 
 If you deviate from this runbook, conflicts and silent corruption become likely.
 
@@ -45,6 +45,8 @@ Hetzner_AaaS_Factory__contexts/    # SSOT worktree: __factory_state__/contexts
 Important: `git worktree add … origin/<branch>` often checks out a **detached HEAD**. That is OK.
 Do **not** immediately try to create/switch a local branch named `__factory_state__/…` inside the worktree.
 You can commit and push from detached HEAD safely.
+
+Because SSOT worktrees are often detached HEAD, use `git fetch origin __factory_state__/<name>` followed by `git reset --hard origin/__factory_state__/<name>` to synchronize. Do not use `git pull` inside SSOT worktrees.
 
 ### If you previously checked out __factory_state__/... in the main repo
 
@@ -107,7 +109,7 @@ If you violate this, conflicts and silent corruption WILL occur.
 2. Always use the dedicated worktree (`Hetzner_AaaS_Factory__queue/`) for SSOT mutation  
 3. Detached HEAD in the worktree is normal — you may commit and push without creating a local branch  
 4. Only append new JSONL lines (single-line JSON; no pretty-print)  
-5. Always `git pull --ff-only` in the SSOT worktree immediately before appending  
+5. Always sync immediately before appending: `git fetch origin __factory_state__/work_queue` then `git reset --hard origin/__factory_state__/work_queue`  
 6. Push ONLY to `__factory_state__/work_queue`  
 7. If a conflict happens, you already broke the rules — abort  
 
@@ -146,7 +148,8 @@ Result:
 
 ```bash
 cd ../Hetzner_AaaS_Factory__queue
-git pull --ff-only
+git fetch origin __factory_state__/work_queue
+git reset --hard origin/__factory_state__/work_queue
 less factory/work_queue.jsonl
 ```
 
@@ -164,7 +167,8 @@ GitHub Actions (worker/executor) append new events to the SSOT branch. If you fe
 Correct response (in the SSOT worktree):
 
 ```bash
-git pull --ff-only
+git fetch origin __factory_state__/work_queue
+git reset --hard origin/__factory_state__/work_queue
 ```
 
 Do not try to “restore” the file to what you saw earlier.
@@ -240,8 +244,10 @@ git rev-parse --abbrev-ref HEAD
 Then fast-forward pull:
 
 ```bash
-git pull --ff-only
+git fetch origin __factory_state__/work_queue
+git reset --hard origin/__factory_state__/work_queue
 ```
+Note: SSOT worktrees are commonly in detached HEAD; `git pull` requires a branch and will fail. Use fetch+reset as the supported sync method.
 
 If this fails → STOP (someone else advanced SSOT; you must synchronize before appending).
 
@@ -301,7 +307,8 @@ Cause:
 Action:
 
 ```bash
-git pull --ff-only
+git fetch origin __factory_state__/work_queue
+git reset --hard origin/__factory_state__/work_queue
 ```
 
 Continue.
@@ -360,7 +367,7 @@ SSOT safety is more important than convenience.
 
 ---
 
-# Context SSOT Operations Runbook
+## Contexts SSOT operations
 
 ## Goal: “same type” contract (Context SSOT v1)
 
@@ -419,7 +426,7 @@ If you violate this, conflicts and silent corruption WILL occur.
 2. Always use the dedicated worktree (`Hetzner_AaaS_Factory__contexts/`) for SSOT mutation  
 3. Detached HEAD in the worktree is normal — you may commit and push without creating a local branch  
 4. Only append new JSONL lines (single-line JSON; no pretty-print)  
-5. Always `git pull --ff-only` in the SSOT worktree immediately before appending  
+5. Always sync immediately before appending: `git fetch origin __factory_state__/contexts` then `git reset --hard origin/__factory_state__/contexts`  
 6. Push ONLY to `__factory_state__/contexts`  
 7. If a conflict happens, you already broke the rules — abort  
 
@@ -459,11 +466,38 @@ Result:
 
 ```bash
 cd ../Hetzner_AaaS_Factory__contexts
-git pull --ff-only
-less factory/contexts.jsonl
+git fetch origin __factory_state__/contexts
+git reset --hard origin/__factory_state__/contexts
+ls -la factory/contexts.jsonl factory/contexts/*.json | head
+tail -n 50 factory/contexts.jsonl
 ```
 
 Reading is always safe.
+
+### 5.1 Bootstrap Contexts SSOT JSONL (first-time only)
+
+If `factory/contexts.jsonl` does not exist yet on the `__factory_state__/contexts` branch, create it once.
+
+Run inside `Hetzner_AaaS_Factory__contexts/`:
+
+```bash
+cd ../Hetzner_AaaS_Factory__contexts
+
+# sync first
+git fetch origin __factory_state__/contexts
+git reset --hard origin/__factory_state__/contexts
+
+# create JSONL header if missing
+test -f factory/contexts.jsonl || printf '{"type":"__init__","note":"SSOT file placeholder; events start below"}\n' > factory/contexts.jsonl
+
+# validate
+python ../Hetzner_AaaS_Factory/factory/ssot_validate.py --kind contexts --path factory/contexts.jsonl
+
+# commit + push to SSOT
+git add factory/contexts.jsonl
+git commit -m "chore(contexts): init contexts SSOT jsonl"
+git push origin HEAD:__factory_state__/contexts
+```
 
 ---
 
@@ -591,8 +625,10 @@ git rev-parse --abbrev-ref HEAD
 Then fast-forward pull:
 
 ```bash
-git pull --ff-only
+git fetch origin __factory_state__/contexts
+git reset --hard origin/__factory_state__/contexts
 ```
+Note: In detached HEAD, `git pull` will error with "You are not currently on a branch". This is expected; use fetch+reset.
 
 If this fails → STOP (someone else advanced SSOT; you must synchronize before appending).
 
@@ -608,6 +644,10 @@ Append ONE line only (single-line JSON; no pretty-print):
 
 - materialize / update / invalidate / gc のいずれか
 - 既存行は絶対に変更しない
+
+```bash
+python ../Hetzner_AaaS_Factory/factory/ssot_validate.py --kind contexts --path factory/contexts.jsonl
+```
 
 ### 8.3 Commit
 
@@ -636,7 +676,8 @@ Cause:
 Action:
 
 ```bash
-git pull --ff-only
+git fetch origin __factory_state__/contexts
+git reset --hard origin/__factory_state__/contexts
 ```
 
 Continue.
