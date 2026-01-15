@@ -3,6 +3,7 @@ import argparse, json, re, sys
 from pathlib import Path
 
 ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+CTX_ID_RE = re.compile(r"^ctx_\d+_[0-9a-f]{4}$")
 
 def fail(msg: str, line_no: int | None = None, line: str | None = None) -> None:
     prefix = f"[ssot-validate] "
@@ -53,7 +54,7 @@ def validate_queue(obj, *, line_no: int):
         if not obj.get("reason"):
             fail(f"{t} requires reason", line_no=line_no)
 
-def validate_contexts(obj, *, line_no: int):
+def validate_contexts_event(obj, *, line_no: int):
     validate_common(obj, line_no=line_no)
     require(obj, "contextId", line_no=line_no)
     t = obj.get("type")
@@ -74,15 +75,63 @@ def validate_contexts(obj, *, line_no: int):
         if not obj.get("reason"):
             fail("invalidate requires reason", line_no=line_no)
 
+def validate_context_file(obj, *, path: Path):
+    if not isinstance(obj, dict):
+        fail("context file must be a JSON object", line=str(path))
+
+    cid = (obj.get("contextId") or "").strip()
+    if not cid:
+        fail("context file missing required field: contextId", line=str(path))
+
+    # Basic format guard (matches spec examples)
+    if not CTX_ID_RE.match(cid):
+        fail("contextId must match 'ctx_<unix>_<rand4>' (rand4 is hex)", line=str(path))
+
+    # If filename looks like ctx_..., enforce alignment
+    stem = path.stem
+    if stem.startswith("ctx_") and stem != cid:
+        fail(f"contextId must match filename stem: expected={stem} got={cid}", line=str(path))
+
+    jid = (obj.get("jobId") or "").strip()
+    if not jid:
+        fail("context file missing required field: jobId", line=str(path))
+
+    # Optional: spec sanity (if present)
+    spec = obj.get("spec")
+    if spec is not None:
+        if not isinstance(spec, dict):
+            fail("spec must be object", line=str(path))
+        for k in ["source", "version"]:
+            if not (spec.get(k) or "").strip():
+                fail(f"spec.{k} is required when spec is present", line=str(path))
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kind", choices=["queue", "contexts"], required=True)
+    ap.add_argument("--kind", choices=["queue", "contexts", "contexts_dir"], required=True)
     ap.add_argument("--path", required=True)
     args = ap.parse_args()
 
     path = Path(args.path)
     if not path.exists():
         fail(f"file not found: {path}")
+
+    if args.kind == "contexts_dir":
+        if not path.is_dir():
+            fail("--kind contexts_dir requires --path to be a directory")
+
+        files = sorted([p for p in path.rglob("*.json") if p.name.startswith("ctx_")])
+        if not files:
+            fail("no ctx_*.json files found under contexts directory")
+
+        for p in files:
+            try:
+                obj = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                fail("invalid JSON in context file", line=str(p))
+            validate_context_file(obj, path=p)
+
+        print(f"[ssot-validate] OK contexts_dir files={len(files)}")
+        return 0
 
     lines = path.read_text(encoding="utf-8").splitlines()
     if not lines:
@@ -115,8 +164,10 @@ def main():
 
         if args.kind == "queue":
             validate_queue(obj, line_no=i)
+        elif args.kind == "contexts":
+            validate_contexts_event(obj, line_no=i)
         else:
-            validate_contexts(obj, line_no=i)
+            fail("contexts_dir mode does not accept JSONL; point --path to a directory", line_no=i, line=raw)
 
     print("[ssot-validate] OK")
     return 0
