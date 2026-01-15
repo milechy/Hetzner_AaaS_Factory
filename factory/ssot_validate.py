@@ -38,7 +38,7 @@ def validate_common(obj, *, line_no: int):
     if isinstance(ts, str) and not ISO_Z_RE.match(ts):
         fail("ts must be ISO8601 UTC like 'YYYY-MM-DDTHH:MM:SSZ'", line_no=line_no)
 
-def validate_queue(obj, *, line_no: int):
+def validate_queue(obj, *, line_no: int, final_type_by_jobid: dict[str, str] | None = None):
     validate_common(obj, line_no=line_no)
     require(obj, "jobId", line_no=line_no)
     t = obj.get("type")
@@ -58,7 +58,16 @@ def validate_queue(obj, *, line_no: int):
             if not isinstance(payload, dict):
                 fail("job.payload must be object", line_no=line_no)
             if not payload.get("head"):
-                warn("open_pr payload.head is missing (legacy enqueue); executor will fail this job", line_no=line_no)
+                # If this job is already terminal later in the SSOT, suppress noisy warnings.
+                # Keep warning only when the job is still potentially actionable.
+                jid = obj.get("jobId")
+                terminal = {"done", "fail", "cancel"}
+                final_t = (final_type_by_jobid or {}).get(jid, "") if jid else ""
+                if final_t not in terminal:
+                    warn(
+                        "open_pr payload.head is missing (legacy enqueue); executor will fail this job",
+                        line_no=line_no,
+                    )
 
     elif t in ("done", "fail", "cancel"):
         if not obj.get("reason"):
@@ -156,7 +165,8 @@ def main():
     if not (isinstance(head, dict) and head.get("type") == "__init__"):
         fail("first line must be __init__ header", line_no=1, line=lines[0])
 
-    # events
+    # events (two-pass for queue so we can suppress warnings for already-terminal legacy jobs)
+    parsed: list[tuple[int, str, dict]] = []
     for i, raw in enumerate(lines[1:], start=2):
         raw = raw.strip()
         if not raw:
@@ -172,12 +182,27 @@ def main():
         if obj.get("type") == "__init__":
             fail("__init__ is only allowed on the first line", line_no=i, line=raw)
 
+        parsed.append((i, raw, obj))
+
+    final_type_by_jobid: dict[str, str] = {}
+    if args.kind == "queue":
+        for _i, _raw, o in parsed:
+            jid = o.get("jobId")
+            t = o.get("type")
+            if isinstance(jid, str) and jid:
+                final_type_by_jobid[jid] = t
+
+    for i, raw, obj in parsed:
         if args.kind == "queue":
-            validate_queue(obj, line_no=i)
+            validate_queue(obj, line_no=i, final_type_by_jobid=final_type_by_jobid)
         elif args.kind == "contexts":
             validate_contexts_event(obj, line_no=i)
         else:
-            fail("contexts_dir mode does not accept JSONL; point --path to a directory", line_no=i, line=raw)
+            fail(
+                "contexts_dir mode does not accept JSONL; point --path to a directory",
+                line_no=i,
+                line=raw,
+            )
 
     print("[ssot-validate] OK")
     return 0
@@ -185,4 +210,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
