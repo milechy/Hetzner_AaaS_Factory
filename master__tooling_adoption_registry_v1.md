@@ -68,11 +68,27 @@ Rules:
   Scope: Prototyping / visualization only  
   Prohibited: Production control plane, SSOT replacement
 
+
 ### Graph Orchestration
 - LangGraph  
   Status: Conditionally Adopted  
   Scope: Optional execution graphs  
   Prohibited: Central authority, implicit state
+
+### API Compatibility / Boundary Specification
+- Open Responses (openresponses.org)
+  Status: Conditionally Adopted
+  Scope: API boundary / response schema compatibility layer only.
+         Allowed as a design-level contract between LLMRouter and execution layers.
+  Prohibited: Replacing OpenAI Agents SDK as execution substrate; introducing self-hosted
+              Open Responses servers into production runtime; bypassing PR-first workflows.
+  Rationale: Provides a vendor-neutral response schema compatible with OpenAI Responses API,
+             reducing future provider-switch friction while preserving strict Factory control.
+  Reference SSOT: factory_master_v3.md, master__factory_automation_master_v10.md,
+                  master__selfdevagent_llm_routing_v2.md
+  AdoptedAt: 2026-01-16
+  Revisit Condition: If Factory migrates away from OpenAI-compatible response semantics or
+                     requires fully custom runtime orchestration.
 
 ### Mobile / Browser Automation
 - mobile-mcp  
