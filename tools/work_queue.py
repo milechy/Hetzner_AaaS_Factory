@@ -1,4 +1,3 @@
-# tools/work_queue.py
 from __future__ import annotations
 
 import json
@@ -174,6 +173,13 @@ def validate_event_schema(event: Dict[str, Any]) -> None:
             raise SchemaError("invalid_job_base")
         if not isinstance(payload, dict):
             raise SchemaError("invalid_job_payload")
+
+        # For open_pr jobs, payload.head is required (executor requires it)
+        if kind == "open_pr":
+            head = payload.get("head")
+            if not isinstance(head, str) or not head:
+                raise SchemaError("open_pr payload.head is required (e.g. 'feature/xxx')")
+
     else:
         # Non-enqueue events: job is optional. Optional keys must be well-typed when present.
         if "job" in event and not isinstance(event.get("job"), dict):
@@ -285,15 +291,23 @@ def _next_state(cur: JobState, event_type: str) -> JobState:
 # FIFO / head-of-queue checks
 # -----------------------------
 
-def ensure_head_can_transition(state: DerivedQueueState, job_id: str) -> None:
+def ensure_head_can_transition(
+    state: DerivedQueueState,
+    job_id: str,
+    *,
+    actor: str,
+    event_type: str,
+) -> None:
     head = state.head_non_terminal_job()
     if head is None:
         raise InvariantViolation("no_non_terminal_jobs")
     if head != job_id:
         raise InvariantViolation(f"non_head_job_mutation head={head} jobId={job_id}")
 
-    # If head is blocked: worker must stop and do nothing.
-    if state.job_states.get(head) == "blocked":
+    # If head is blocked: the worker (bot) must stop and do nothing by default.
+    # Exception: allow the bot to `cancel` a blocked head (e.g., automated cleanup).
+    # Humans must still be able to unblock/cancel the head.
+    if state.job_states.get(head) == "blocked" and actor == BOT_ACTOR and event_type != "cancel":
         raise BlockedHead(f"head_blocked jobId={head}")
 
 
@@ -316,6 +330,12 @@ def build_enqueue_event(
 
     if job_kind not in JOB_KINDS:
         raise SchemaError(f"invalid_job_kind kind={job_kind}")
+
+    # Enforce that open_pr jobs must have payload.head as a non-empty string
+    if job_kind == "open_pr":
+        head = payload.get("head")
+        if not (isinstance(head, str) and head):
+            raise SchemaError("open_pr payload.head is required (e.g. 'feature/xxx')")
 
     jid = job_id or make_job_id(epoch=epoch)
     return {
@@ -410,7 +430,12 @@ def validate_transition_append(events: List[Dict[str, Any]], transition_event: D
         raise InvariantViolation(f"unknown_jobId jobId={jid}")
 
     # Hard invariant: only head-of-queue can be mutated.
-    ensure_head_can_transition(state, jid)
+    ensure_head_can_transition(
+        state,
+        jid,
+        actor=transition_event.get("actor", ""),
+        event_type=transition_event.get("type", ""),
+    )
 
     # Validate that appending this transition yields a valid fold.
     # This enforces the legal transition rules in `_next_state`.
