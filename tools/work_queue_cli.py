@@ -35,8 +35,12 @@ def _parse_args() -> argparse.Namespace:
     enq.add_argument("--base", required=True, help="base branch, e.g. main")
     enq.add_argument(
         "--payload-json",
+        help=(
+            "JSON object string (must be a dict). "
+            "Example: '{\"title\":\"...\"}'. "
+            "NOTE: for --kind open_pr, payload.head is required (e.g. '{\"head\":\"feature/xxx\"}')."
+        ),
         required=True,
-        help="JSON object string (must be a dict). Example: '{\"title\":\"...\"}'",
     )
 
     tr = sub.add_parser("transition", help="Append a non-enqueue transition event (head-of-queue only).")
@@ -70,8 +74,12 @@ def _parse_args() -> argparse.Namespace:
     ssot.add_argument("--base", required=True, help="base branch, e.g. main")
     ssot.add_argument(
         "--payload-json",
+        help=(
+            "JSON object string (must be a dict). "
+            "Example: '{\"title\":\"...\"}'. "
+            "NOTE: for --kind open_pr, payload.head is required (e.g. '{\"head\":\"feature/xxx\"}')."
+        ),
         required=True,
-        help="JSON object string (must be a dict). Example: '{\"title\":\"...\"}'",
     )
 
     return p.parse_args()
@@ -140,6 +148,12 @@ def main() -> None:
             raise SystemExit(4)
 
         payload = _load_payload(args.payload_json)
+
+        if args.kind == "open_pr":
+            head_ref = (payload.get("head") or "").strip() if isinstance(payload.get("head"), str) else ""
+            if not head_ref:
+                print("[WorkQueue] exit=4 reason=missing_payload_head kind=open_pr", file=sys.stderr)
+                raise SystemExit(4)
 
         try:
             ev = enqueue(
@@ -271,6 +285,12 @@ def main() -> None:
             raise SystemExit(4)
 
         payload = _load_payload(args.payload_json)
+
+        if args.kind == "open_pr":
+            head_ref = (payload.get("head") or "").strip() if isinstance(payload.get("head"), str) else ""
+            if not head_ref:
+                print("[WorkQueue] exit=4 reason=missing_payload_head kind=open_pr", file=sys.stderr)
+                raise SystemExit(4)
 
         orig = _current_branch()
         try:
