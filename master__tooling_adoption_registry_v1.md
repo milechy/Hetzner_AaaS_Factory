@@ -1,4 +1,4 @@
-# Tooling & Knowledge Adoption Registry v1.2
+# Tooling & Knowledge Adoption Registry v1.5
 # SSOT – Authoritative Record of Evaluated Tools, OSS, and Concepts
 
 ## Binding Rule (Hard)
@@ -11,6 +11,9 @@
 ## 0.1 Change Log
 - v1.1: Add normative metadata fields (Reference SSOT, Revisit Condition, AdoptedAt) and proposal gate rules to prevent re‑proposal drift.
 - v1.2: Adopt `requests` (Supporting) for RepoLock GitHub REST calls (limited scope).
+- v1.3: Conditionally adopt Open Responses as an API-boundary compatibility spec (no runtime server adoption).
+- v1.4: Conditionally adopt okiro (human-in-the-loop parallel workspaces) and mark loom (ghuntley/loom) as Not Adopted; add loom design notes as reference-only.
+- v1.5: Adopt model-role policy: Codex as Writer and Opus 4.5 as Reviewer (read-only) for Factory development automation.
 
 ## 0. Purpose
 
@@ -58,6 +61,15 @@ Rules:
   Scope: Cost-aware, risk-aware routing  
   References: llm_router_design_v1.md, master__future_model_pool_v1.md
 
+- Model-role separation (Codex Writer / Opus 4.5 Reviewer)
+  Status: Adopted (Core)
+  Scope: Factory development automation uses Codex for implementation and Opus 4.5 for read-only review; enforced via routing profiles and tool permissions.
+  Prohibited: Allowing reviewer models to perform write-side effects; allowing writer models to bypass OpenPR Contract / ToolGate; direct git push to remote.
+  Rationale: Reduces SSOT drift and prevents uncontrolled scope expansion while enabling high-throughput implementation with reliable review.
+  Reference SSOT: `master__agent_execution_model_policy_v1.md`, `master__selfdevagent_llm_routing_v3.md`, `factory_master_v3.md`, `master__security_checklist_v2.md`
+  AdoptedAt: 2026-01-16
+  Revisit Condition: If Factory replaces the Codex/Opus split with an equivalent writer/reviewer enforcement mechanism.
+
 ---
 
 ## 2. Conditionally Adopted / Limited Scope
@@ -85,10 +97,26 @@ Rules:
   Rationale: Provides a vendor-neutral response schema compatible with OpenAI Responses API,
              reducing future provider-switch friction while preserving strict Factory control.
   Reference SSOT: factory_master_v3.md, master__factory_automation_master_v10.md,
-                  master__selfdevagent_llm_routing_v2.md
+                  master__selfdevagent_llm_routing_v3.md
   AdoptedAt: 2026-01-16
   Revisit Condition: If Factory migrates away from OpenAI-compatible response semantics or
                      requires fully custom runtime orchestration.
+### Human-in-the-loop Development Utilities
+- okiro (ygwyg/okiro)
+  Status: Conditionally Adopted
+  Scope: Local human-driven parallel experimentation only.
+         Allowed for generating and comparing multiple candidate implementations
+         before PR creation.
+  Prohibited: CI usage, automated agent execution, Factory core workflows,
+              SelfDevAgent integration, cloud-only execution assumptions.
+  Rationale: Enables safe parallel exploration without violating PR-first
+             or Human Gate principles. Acts as a developer productivity tool,
+             not an agent framework.
+  Reference SSOT: master__factory_version_roadmap_v1.md,
+                  master__factory_automation_master_v10.md
+  AdoptedAt: 2026-01-16
+  Revisit Condition: If Factory introduces first-class parallel proposal
+                     orchestration with explicit human selection gates.
 
 ### Mobile / Browser Automation
 - mobile-mcp  
@@ -120,8 +148,10 @@ Rules:
 - AgentMark
 - OpenCode
 - DeepCode
+- loom (ghuntley/loom)
 
 Reason: Conflicts with PR-first, human-gated, SSOT-controlled Factory model.
+Loom Note: The repository itself discourages general adoption and functions as a personal/experimental runtime. It is not suitable as a Factory dependency under PR-first / Human Gate constraints.
 
 ### Memory / Context Layers
 - MemOS
@@ -181,6 +211,7 @@ Reason: UI handled in separate UI workflow; not Factory core.
 - how-to-build-a-coding-agent (ghuntley)
 - LLM datasets (mlabonne)
 - AI Security awesome lists
+- Loom (ghuntley) design notes / backpressure mindset (reference-only)
 
 Status: Reference-only; no direct implementation allowed.
 
