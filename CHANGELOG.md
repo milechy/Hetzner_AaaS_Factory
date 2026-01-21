@@ -10,6 +10,8 @@ controlled Git operations.
 - ContextPackage v1.7.0 minimal SSOT materialization: core builder + CLI wiring to `__factory_state__/work_queue`.
 - Add v1.7.0 roadmap entry for ContextPackage SSOT materialization (minimal).
 - RepoLock: classify GitHub 403 PAT insufficient for Git refs (`TOKEN_INSUFFICIENT_FOR_GIT_REFS`).
+- Docs/Policy: add SSOT model-role enforcement (Codex=Writer, Opus 4.5=Reviewer) and prohibit reviewer write-side effects.
+- Docs: update SelfDevAgent LLM routing to v3 (writer/reviewer profiles) and register the policy in the tooling registry (v1.5).
 
 ⸻
 
