@@ -1,6 +1,6 @@
 from apps.agents.selfdev_agent.router_client import LLMRouterClient, RouterRequiredError
 from apps.agents.selfdev_agent.selfdev_agent_v4 import PermissionDeniedError, ToolPermissions, SelfDevAgentV4
-from apps.agents.selfdev_agent.schemas import TaskBrief
+from apps.agents.selfdev_agent.schemas import PRProposal, TaskBrief
 
 
 def test_router_requires_profile():
@@ -77,3 +77,29 @@ def test_agent_run_returns_proposal():
         assert isinstance(d["verification"][key], dict)
         assert "status" in d["verification"][key]
         assert "command" in d["verification"][key]
+    assert isinstance(d["validation"], dict)
+    for key in (
+        "invariants_ok",
+        "violations",
+        "warnings",
+        "fix_required_questions",
+        "checked_items",
+    ):
+        assert key in d["validation"]
+    assert d["validation"]["invariants_ok"] is True
+
+
+def test_validation_fails_for_broken_proposal():
+    agent = SelfDevAgentV4(router=LLMRouterClient())
+    brief = TaskBrief(task_id="selfdev-v4-mvp-002", goal="Validate failure case")
+    proposal = PRProposal(
+        summary="Broken proposal",
+        risk_level="low",
+        task_kind="implement",
+        router_proofs=[],
+        context_scan=None,
+        plan=None,
+    )
+    validation = agent.validate_proposal_invariants(proposal, brief)
+    assert validation.invariants_ok is False
+    assert validation.violations
