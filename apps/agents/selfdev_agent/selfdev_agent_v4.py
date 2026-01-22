@@ -84,7 +84,13 @@ class SelfDevAgentV4:
         perms.assert_can_run()
         return {"tests": {"status": "not_run", "notes": "MVP stub"}, "lint": {"status": "not_run"}}
 
-    def review(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> tuple[List[str], RouteDecision]:
+    def review(
+        self,
+        brief: TaskBrief,
+        risk: RiskLevel,
+        kind: TaskKind,
+        exec_decision: RouteDecision,
+    ) -> tuple[List[str], RouteDecision, List[RouterDecisionProof], List[str]]:
         route_decision = self.router.route(profile="reviewer", risk_level=risk, task_kind="review")
         perms = ToolPermissions(profile="reviewer")
         # Assert reviewer cannot write:
@@ -93,7 +99,57 @@ class SelfDevAgentV4:
             raise AssertionError("reviewer write should have been denied")
         except PermissionDeniedError:
             pass
-        return ["(MVP) review stub: reviewer read-only notes."], route_decision
+        router_proofs = [
+            RouterDecisionProof(
+                profile="writer",
+                risk_level=risk,
+                task_kind=kind,
+                selected_model=exec_decision.selected_model,
+                rationale=exec_decision.rationale,
+                fallback_chain=exec_decision.fallback_chain,
+            ),
+            RouterDecisionProof(
+                profile="reviewer",
+                risk_level=risk,
+                task_kind="review",
+                selected_model=route_decision.selected_model,
+                rationale=route_decision.rationale,
+                fallback_chain=route_decision.fallback_chain,
+            ),
+        ]
+        review_notes: List[str] = []
+        open_questions: List[str] = []
+        if not isinstance(router_proofs, list):
+            review_notes.append("FAIL: router_proofs must be a list")
+            open_questions.append("Is router_proofs a list with at least two entries?")
+        else:
+            review_notes.append("PASS: router_proofs is a list")
+            if len(router_proofs) >= 2:
+                review_notes.append("PASS: router_proofs has at least two entries")
+            else:
+                review_notes.append("FAIL: router_proofs has fewer than two entries")
+                open_questions.append("Why does router_proofs contain fewer than two entries?")
+            for idx, proof in enumerate(router_proofs):
+                payload = proof.to_dict() if hasattr(proof, "to_dict") else proof.__dict__
+                missing = [key for key in ("profile", "selected_model") if key not in payload]
+                if missing:
+                    review_notes.append(
+                        f"FAIL: router_proofs[{idx}] missing keys: {', '.join(missing)}"
+                    )
+                    open_questions.append(
+                        f"Is router_proofs[{idx}] missing required keys (profile, selected_model)?"
+                    )
+                else:
+                    review_notes.append(f"PASS: router_proofs[{idx}] has required keys")
+                profile = payload.get("profile")
+                if profile in {"writer", "reviewer"}:
+                    review_notes.append(f"PASS: router_proofs[{idx}] profile is valid")
+                else:
+                    review_notes.append(f"FAIL: router_proofs[{idx}] profile is invalid")
+                    open_questions.append(
+                        f"Is router_proofs[{idx}] profile limited to writer or reviewer?"
+                    )
+        return review_notes, route_decision, router_proofs, open_questions
 
     def reflect(
         self,
@@ -111,26 +167,10 @@ class SelfDevAgentV4:
         risk, kind, _steps = self.plan(brief)
         _, exec_decision = self.exec(brief, risk, kind)
         verification = self.verify(risk, kind)
-        review_notes, review_decision = self.review(brief, risk, kind)
+        review_notes, review_decision, router_proofs, open_questions = self.review(
+            brief, risk, kind, exec_decision
+        )
         reflection = self.reflect(brief, risk, kind, review_notes)
-        router_proofs = [
-            RouterDecisionProof(
-                profile="writer",
-                risk_level=risk,
-                task_kind=kind,
-                selected_model=exec_decision.selected_model,
-                rationale=exec_decision.rationale,
-                fallback_chain=exec_decision.fallback_chain,
-            ),
-            RouterDecisionProof(
-                profile="reviewer",
-                risk_level=risk,
-                task_kind="review",
-                selected_model=review_decision.selected_model,
-                rationale=review_decision.rationale,
-                fallback_chain=review_decision.fallback_chain,
-            ),
-        ]
 
         return PRProposal(
             summary=f"SelfDevAgent v4 MVP proposal for task_id={brief.task_id}",
@@ -138,6 +178,7 @@ class SelfDevAgentV4:
             task_kind=kind,
             verification=verification,
             review_notes=review_notes,
+            open_questions=open_questions,
             context_scan=context_scan,
             plan=plan,
             reflection=reflection,
