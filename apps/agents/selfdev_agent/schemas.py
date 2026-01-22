@@ -6,6 +6,21 @@ from typing import Any, Dict, List, Literal, Optional
 RiskLevel = Literal["low", "medium", "high"]
 TaskKind = Literal["implement", "test_fix", "review", "ssot_update"]
 Profile = Literal["writer", "reviewer"]
+InvariantSeverity = Literal["warn", "fix_required"]
+InvariantCode = Literal[
+    "INV_ROUTER_PROOFS_MISSING",
+    "INV_ROUTER_PROOF_WRITER_MISSING",
+    "INV_ROUTER_PROOF_REVIEWER_MISSING",
+    "INV_ROUTER_PROOF_FIELDS_INVALID",
+    "INV_ROUTER_PROOF_REVIEW_TASK_KIND_INVALID",
+    "INV_PLAN_MISSING",
+    "INV_PLAN_STEPS_EMPTY",
+    "INV_PLAN_STEP_EMPTY",
+    "INV_CONTEXT_SCAN_MISSING",
+    "INV_CONTEXT_TASK_ID_MISMATCH",
+    "INV_CONTEXT_GOAL_EMPTY",
+    "INV_RISK_LEVEL_MISMATCH",
+]
 
 
 @dataclass
@@ -93,6 +108,22 @@ class RouterDecisionProof:
 
 
 @dataclass
+class InvariantFinding:
+    code: InvariantCode
+    severity: InvariantSeverity
+    message: str
+    field: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "message": self.message,
+            "field": self.field,
+        }
+
+
+@dataclass
 class PRProposal:
     summary: str
     risk_level: RiskLevel
@@ -105,6 +136,7 @@ class PRProposal:
     plan: Optional[Plan] = None
     reflection: List[ReflectionNote] = field(default_factory=list)
     router_proofs: List[RouterDecisionProof] = field(default_factory=list)
+    invariant_findings: List[InvariantFinding] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -119,4 +151,5 @@ class PRProposal:
             "plan": self.plan.to_dict() if self.plan else None,
             "reflection": [note.to_dict() for note in self.reflection],
             "router_proofs": [proof.to_dict() for proof in self.router_proofs],
+            "invariant_findings": [finding.to_dict() for finding in self.invariant_findings],
         }

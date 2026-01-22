@@ -6,6 +6,7 @@ from typing import List
 from .router_client import LLMRouterClient, RouteDecision
 from .schemas import (
     ContextIntentScan,
+    InvariantFinding,
     Plan,
     PlanStep,
     PRProposal,
@@ -188,32 +189,23 @@ class SelfDevAgentV4:
 
     def validate_proposal_invariants(
         self, proposal: PRProposal, brief: TaskBrief
-    ) -> tuple[List[str], List[str]]:
-        violations: List[str] = []
-        fix_required: List[str] = []
+    ) -> List[InvariantFinding]:
+        findings: List[InvariantFinding] = []
 
         router_proofs = proposal.router_proofs
-        if not isinstance(router_proofs, list):
-            violations.append("router_proofs must be a list")
-            fix_required.append("router_proofs must be a list with at least two entries")
-            return violations, fix_required
-
-        if not router_proofs:
-            violations.append("router_proofs must contain at least two proofs")
-            fix_required.append("router_proofs is empty; include writer and reviewer proofs")
-        elif len(router_proofs) < 2:
-            violations.append("router_proofs must contain at least two proofs")
+        if not isinstance(router_proofs, list) or len(router_proofs) < 2:
+            findings.append(
+                InvariantFinding(
+                    code="INV_ROUTER_PROOFS_MISSING",
+                    severity="fix_required",
+                    message="router_proofs must be a list with at least two entries",
+                    field="router_proofs",
+                )
+            )
+            router_proofs = [] if not isinstance(router_proofs, list) else router_proofs
 
         has_writer = False
         has_reviewer = False
-        required_keys = (
-            "profile",
-            "risk_level",
-            "task_kind",
-            "selected_model",
-            "rationale",
-            "fallback_chain",
-        )
         for idx, proof in enumerate(router_proofs):
             if isinstance(proof, dict):
                 payload = proof
@@ -222,23 +214,20 @@ class SelfDevAgentV4:
             else:
                 payload = getattr(proof, "__dict__", {})
 
-            missing = [key for key in required_keys if key not in payload]
-            if missing:
-                violations.append(
-                    f"router_proofs[{idx}] missing keys: {', '.join(missing)}"
-                )
-
             selected_model = payload.get("selected_model")
-            if not selected_model:
-                violations.append(f"router_proofs[{idx}] selected_model must be non-empty")
             rationale = payload.get("rationale")
-            if not rationale:
-                violations.append(f"router_proofs[{idx}] rationale must be non-empty")
-
             fallback_chain = payload.get("fallback_chain")
-            if not isinstance(fallback_chain, list) or len(fallback_chain) < 1:
-                violations.append(
-                    f"router_proofs[{idx}] fallback_chain must be a non-empty list"
+            if not selected_model or not rationale or not isinstance(fallback_chain, list) or not fallback_chain:
+                findings.append(
+                    InvariantFinding(
+                        code="INV_ROUTER_PROOF_FIELDS_INVALID",
+                        severity="fix_required",
+                        message=(
+                            "router_proofs entries require selected_model, rationale, "
+                            "and non-empty fallback_chain"
+                        ),
+                        field=f"router_proofs[{idx}]",
+                    )
                 )
 
             profile = payload.get("profile")
@@ -247,43 +236,107 @@ class SelfDevAgentV4:
             elif profile == "reviewer":
                 has_reviewer = True
                 if payload.get("task_kind") != "review":
-                    violations.append(
-                        f"router_proofs[{idx}] reviewer task_kind must be review"
+                    findings.append(
+                        InvariantFinding(
+                            code="INV_ROUTER_PROOF_REVIEW_TASK_KIND_INVALID",
+                            severity="fix_required",
+                            message="reviewer router_proofs entries must use task_kind=review",
+                            field=f"router_proofs[{idx}].task_kind",
+                        )
                     )
 
             proof_risk = payload.get("risk_level")
             if proof_risk and proof_risk != proposal.risk_level:
-                violations.append(
-                    f"router_proofs[{idx}] risk_level differs from proposal risk_level"
+                findings.append(
+                    InvariantFinding(
+                        code="INV_RISK_LEVEL_MISMATCH",
+                        severity="warn",
+                        message="router_proofs risk_level differs from proposal risk_level",
+                        field=f"router_proofs[{idx}].risk_level",
+                    )
                 )
 
         if not has_writer:
-            violations.append("router_proofs missing writer proof")
-            fix_required.append("add writer proof to router_proofs")
+            findings.append(
+                InvariantFinding(
+                    code="INV_ROUTER_PROOF_WRITER_MISSING",
+                    severity="fix_required",
+                    message="router_proofs must include a writer proof",
+                    field="router_proofs.profile",
+                )
+            )
         if not has_reviewer:
-            violations.append("router_proofs missing reviewer proof")
-            fix_required.append("add reviewer proof to router_proofs")
+            findings.append(
+                InvariantFinding(
+                    code="INV_ROUTER_PROOF_REVIEWER_MISSING",
+                    severity="fix_required",
+                    message="router_proofs must include a reviewer proof",
+                    field="router_proofs.profile",
+                )
+            )
 
         plan = proposal.plan
         if plan is None:
-            violations.append("plan must be present")
+            findings.append(
+                InvariantFinding(
+                    code="INV_PLAN_MISSING",
+                    severity="fix_required",
+                    message="plan must be present",
+                    field="plan",
+                )
+            )
         elif not isinstance(plan.steps, list) or len(plan.steps) < 1:
-            violations.append("plan.steps must be a non-empty list")
+            findings.append(
+                InvariantFinding(
+                    code="INV_PLAN_STEPS_EMPTY",
+                    severity="fix_required",
+                    message="plan.steps must be a non-empty list",
+                    field="plan.steps",
+                )
+            )
         else:
             for idx, step in enumerate(plan.steps):
                 if not getattr(step, "step", ""):
-                    violations.append(f"plan.steps[{idx}].step must be non-empty")
+                    findings.append(
+                        InvariantFinding(
+                            code="INV_PLAN_STEP_EMPTY",
+                            severity="fix_required",
+                            message="plan.steps entries must have a non-empty step",
+                            field=f"plan.steps[{idx}].step",
+                        )
+                    )
 
         context_scan = proposal.context_scan
         if context_scan is None:
-            violations.append("context_scan must be present")
+            findings.append(
+                InvariantFinding(
+                    code="INV_CONTEXT_SCAN_MISSING",
+                    severity="fix_required",
+                    message="context_scan must be present",
+                    field="context_scan",
+                )
+            )
         else:
             if context_scan.task_id != brief.task_id:
-                violations.append("context_scan.task_id must match brief.task_id")
+                findings.append(
+                    InvariantFinding(
+                        code="INV_CONTEXT_TASK_ID_MISMATCH",
+                        severity="fix_required",
+                        message="context_scan.task_id must match brief.task_id",
+                        field="context_scan.task_id",
+                    )
+                )
             if not context_scan.goal:
-                violations.append("context_scan.goal must be non-empty")
+                findings.append(
+                    InvariantFinding(
+                        code="INV_CONTEXT_GOAL_EMPTY",
+                        severity="fix_required",
+                        message="context_scan.goal must be non-empty",
+                        field="context_scan.goal",
+                    )
+                )
 
-        return violations, fix_required
+        return findings
 
     def run(self, brief: TaskBrief) -> PRProposal:
         context_scan = self.scan_context_intent(brief)
@@ -321,7 +374,13 @@ class SelfDevAgentV4:
         except PermissionDeniedError:
             pass
 
-        violations, fix_required = self.validate_proposal_invariants(proposal, brief)
-        proposal.review_notes.extend([f"[invariant] {note}" for note in violations])
-        proposal.open_questions.extend([f"Fix required: {note}" for note in fix_required])
+        findings = self.validate_proposal_invariants(proposal, brief)
+        proposal.invariant_findings = findings
+        for finding in findings:
+            if finding.severity == "warn":
+                proposal.review_notes.append(f"[WARN] {finding.code}: {finding.message}")
+            elif finding.severity == "fix_required":
+                proposal.open_questions.append(
+                    f"[FIX] {finding.code}: {finding.message}"
+                )
         return proposal
