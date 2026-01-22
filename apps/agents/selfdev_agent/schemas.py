@@ -142,6 +142,44 @@ class ProposalValidation:
 
 
 @dataclass
+class ReviewCheck:
+    id: str
+    title: str
+    status: str
+    message: str = ""
+    ssot_refs: List[str] = field(default_factory=list)
+    evidence: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "status": self.status,
+            "message": self.message,
+            "ssot_refs": list(self.ssot_refs),
+            "evidence": dict(self.evidence),
+        }
+
+
+@dataclass
+class ReviewResult:
+    status: str
+    summary: str
+    checks: List[ReviewCheck] = field(default_factory=list)
+    violations: List[str] = field(default_factory=list)
+    open_questions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "status": self.status,
+            "summary": self.summary,
+            "checks": [check.to_dict() for check in self.checks],
+            "violations": list(self.violations),
+            "open_questions": list(self.open_questions),
+        }
+
+
+@dataclass
 class PRProposal:
     summary: str
     risk_level: RiskLevel
@@ -156,6 +194,7 @@ class PRProposal:
     router_proofs: List[RouterDecisionProof] = field(default_factory=list)
     invariant_findings: List[InvariantFinding] = field(default_factory=list)
     validation: Optional[ProposalValidation] = None
+    review_result: Optional[ReviewResult] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -172,4 +211,5 @@ class PRProposal:
             "router_proofs": [proof.to_dict() for proof in self.router_proofs],
             "invariant_findings": [finding.to_dict() for finding in self.invariant_findings],
             "validation": self.validation.to_dict() if self.validation else None,
+            "review_result": self.review_result.to_dict() if self.review_result else None,
         }

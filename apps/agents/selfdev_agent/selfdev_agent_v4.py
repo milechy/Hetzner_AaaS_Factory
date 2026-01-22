@@ -11,6 +11,8 @@ from .schemas import (
     PlanStep,
     PRProposal,
     ProposalValidation,
+    ReviewCheck,
+    ReviewResult,
     ReflectionNote,
     RouterDecisionProof,
     RiskLevel,
@@ -376,6 +378,92 @@ class SelfDevAgentV4:
             checked_items=checked_items,
         )
 
+    def build_review_result(self, brief: TaskBrief, proposal: PRProposal) -> ReviewResult:
+        findings = proposal.invariant_findings or self._collect_invariant_findings(
+            proposal, brief
+        )
+        validation = self.validate_proposal_invariants(proposal, brief)
+
+        check_definitions = [
+            (
+                "router_proofs.present",
+                "Router proofs present",
+                {
+                    "INV_ROUTER_PROOFS_MISSING",
+                    "INV_ROUTER_PROOF_WRITER_MISSING",
+                    "INV_ROUTER_PROOF_REVIEWER_MISSING",
+                },
+            ),
+            (
+                "router_proofs.fields",
+                "Router proofs fields valid",
+                {"INV_ROUTER_PROOF_FIELDS_INVALID"},
+            ),
+            (
+                "router_proofs.reviewer_task_kind",
+                "Reviewer proof task_kind is review",
+                {"INV_ROUTER_PROOF_REVIEW_TASK_KIND_INVALID"},
+            ),
+            (
+                "plan.present",
+                "Plan present and non-empty",
+                {"INV_PLAN_MISSING", "INV_PLAN_STEPS_EMPTY", "INV_PLAN_STEP_EMPTY"},
+            ),
+            (
+                "context_scan.matches_task",
+                "Context scan matches task brief",
+                {
+                    "INV_CONTEXT_SCAN_MISSING",
+                    "INV_CONTEXT_TASK_ID_MISMATCH",
+                    "INV_CONTEXT_GOAL_EMPTY",
+                },
+            ),
+            (
+                "risk_level.consistency",
+                "Risk level consistent with router proofs",
+                {"INV_RISK_LEVEL_MISMATCH"},
+            ),
+        ]
+
+        checks: List[ReviewCheck] = []
+        for check_id, title, codes in check_definitions:
+            related = [finding for finding in findings if finding.code in codes]
+            if any(finding.severity == "fix_required" for finding in related):
+                status = "fail"
+            elif any(finding.severity == "warn" for finding in related):
+                status = "warn"
+            else:
+                status = "pass"
+            message = "; ".join(finding.message for finding in related)
+            checks.append(
+                ReviewCheck(
+                    id=check_id,
+                    title=title,
+                    status=status,
+                    message=message,
+                    evidence={"findings": [finding.to_dict() for finding in related]},
+                )
+            )
+
+        if validation.violations:
+            status = "fail"
+        elif validation.warnings:
+            status = "warn"
+        else:
+            status = "pass"
+        summary = (
+            f"Review status: {status}. "
+            f"{len(validation.violations)} violation(s), "
+            f"{len(validation.warnings)} warning(s)."
+        )
+        return ReviewResult(
+            status=status,
+            summary=summary,
+            checks=checks,
+            violations=list(validation.violations),
+            open_questions=list(proposal.open_questions),
+        )
+
     def run(self, brief: TaskBrief) -> PRProposal:
         context_scan = self.scan_context_intent(brief)
         plan = self.planner(brief)
@@ -422,4 +510,5 @@ class SelfDevAgentV4:
                 proposal.open_questions.append(
                     f"[FIX] {finding.code}: {finding.message}"
                 )
+        proposal.review_result = self.build_review_result(brief, proposal)
         return proposal

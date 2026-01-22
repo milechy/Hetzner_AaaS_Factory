@@ -87,6 +87,18 @@ def test_agent_run_returns_proposal():
     ):
         assert key in d["validation"]
     assert d["validation"]["invariants_ok"] is True
+    assert isinstance(d["review_result"], dict)
+    assert d["review_result"]["status"] in {"pass", "warn", "fail"}
+    assert isinstance(d["review_result"]["checks"], list)
+    check_ids = {check.get("id") for check in d["review_result"]["checks"]}
+    assert {
+        "router_proofs.present",
+        "router_proofs.fields",
+        "router_proofs.reviewer_task_kind",
+        "plan.present",
+        "context_scan.matches_task",
+        "risk_level.consistency",
+    }.issubset(check_ids)
 
 
 def test_validation_fails_for_broken_proposal():
