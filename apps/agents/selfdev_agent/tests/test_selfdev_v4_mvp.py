@@ -38,9 +38,11 @@ def test_agent_run_returns_proposal():
     assert any("PASS" in note for note in d["review_notes"])
     assert isinstance(d["context_scan"], dict)
     assert d["context_scan"]["task_id"] == brief.task_id
+    assert d["context_scan"]["goal"]
     assert isinstance(d["plan"], dict)
     assert isinstance(d["plan"]["steps"], list)
-    assert 1 <= len(d["plan"]["steps"]) <= 3
+    assert len(d["plan"]["steps"]) >= 1
+    assert all(step.get("step") for step in d["plan"]["steps"])
     assert isinstance(d["reflection"], list)
     assert len(d["reflection"]) >= 2
     assert "note" in d["reflection"][0]
@@ -48,9 +50,17 @@ def test_agent_run_returns_proposal():
     assert "router_proofs" in d
     assert isinstance(d["router_proofs"], list)
     assert len(d["router_proofs"]) >= 2
+    profiles = {proof.get("profile") for proof in d["router_proofs"]}
+    assert "writer" in profiles
+    assert "reviewer" in profiles
     for proof in d["router_proofs"]:
         assert "profile" in proof
         assert "selected_model" in proof
+        assert proof.get("rationale")
+        assert isinstance(proof.get("fallback_chain"), list)
+        assert len(proof.get("fallback_chain")) >= 1
+        if proof.get("profile") == "reviewer":
+            assert proof.get("task_kind") == "review"
     assert isinstance(d["verification"], dict)
     for key in ("tests", "lint", "format"):
         assert key in d["verification"]
