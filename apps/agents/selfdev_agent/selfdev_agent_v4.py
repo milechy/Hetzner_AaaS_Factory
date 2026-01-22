@@ -4,7 +4,16 @@ from dataclasses import dataclass
 from typing import List
 
 from .router_client import LLMRouterClient
-from .schemas import PRProposal, RiskLevel, TaskBrief, TaskKind
+from .schemas import (
+    ContextIntentScan,
+    Plan,
+    PlanStep,
+    PRProposal,
+    ReflectionNote,
+    RiskLevel,
+    TaskBrief,
+    TaskKind,
+)
 
 
 class PermissionDeniedError(RuntimeError):
@@ -42,6 +51,26 @@ class SelfDevAgentV4:
         ]
         return risk, kind, steps
 
+    def scan_context_intent(self, brief: TaskBrief) -> ContextIntentScan:
+        return ContextIntentScan(
+            task_id=brief.task_id,
+            goal=brief.goal,
+            non_goals=list(brief.non_goals),
+            repo_scope=list(brief.repo_scope),
+            risk_hint=brief.risk_hint,
+            definition_of_done=list(brief.definition_of_done),
+            constraints=list(brief.constraints),
+        )
+
+    def planner(self, brief: TaskBrief) -> Plan:
+        _ = brief
+        return Plan(
+            steps=[
+                PlanStep(step="Confirm task brief intent and scope."),
+                PlanStep(step="Sketch minimal change set and verify boundaries."),
+            ]
+        )
+
     def exec(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> List[str]:
         _ = self.router.route(profile="writer", risk_level=risk, task_kind=kind)
         perms = ToolPermissions(profile="writer")
@@ -65,11 +94,24 @@ class SelfDevAgentV4:
             pass
         return ["(MVP) review stub: reviewer read-only notes."]
 
+    def reflect(
+        self,
+        brief: TaskBrief,
+        risk: RiskLevel,
+        kind: TaskKind,
+        review_notes: List[str],
+    ) -> List[ReflectionNote]:
+        _ = brief, risk, kind
+        return [ReflectionNote(note=f"(MVP) reflection stub: {len(review_notes)} review note(s).")]
+
     def run(self, brief: TaskBrief) -> PRProposal:
+        context_scan = self.scan_context_intent(brief)
+        plan = self.planner(brief)
         risk, kind, _steps = self.plan(brief)
         _ = self.exec(brief, risk, kind)
         verification = self.verify(risk, kind)
         review_notes = self.review(brief, risk, kind)
+        reflection = self.reflect(brief, risk, kind, review_notes)
 
         return PRProposal(
             summary=f"SelfDevAgent v4 MVP proposal for task_id={brief.task_id}",
@@ -77,4 +119,7 @@ class SelfDevAgentV4:
             task_kind=kind,
             verification=verification,
             review_notes=review_notes,
+            context_scan=context_scan,
+            plan=plan,
+            reflection=reflection,
         )
