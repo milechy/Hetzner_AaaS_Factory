@@ -186,6 +186,105 @@ class SelfDevAgentV4:
             )
         return notes
 
+    def validate_proposal_invariants(
+        self, proposal: PRProposal, brief: TaskBrief
+    ) -> tuple[List[str], List[str]]:
+        violations: List[str] = []
+        fix_required: List[str] = []
+
+        router_proofs = proposal.router_proofs
+        if not isinstance(router_proofs, list):
+            violations.append("router_proofs must be a list")
+            fix_required.append("router_proofs must be a list with at least two entries")
+            return violations, fix_required
+
+        if not router_proofs:
+            violations.append("router_proofs must contain at least two proofs")
+            fix_required.append("router_proofs is empty; include writer and reviewer proofs")
+        elif len(router_proofs) < 2:
+            violations.append("router_proofs must contain at least two proofs")
+
+        has_writer = False
+        has_reviewer = False
+        required_keys = (
+            "profile",
+            "risk_level",
+            "task_kind",
+            "selected_model",
+            "rationale",
+            "fallback_chain",
+        )
+        for idx, proof in enumerate(router_proofs):
+            if isinstance(proof, dict):
+                payload = proof
+            elif hasattr(proof, "to_dict"):
+                payload = proof.to_dict()
+            else:
+                payload = getattr(proof, "__dict__", {})
+
+            missing = [key for key in required_keys if key not in payload]
+            if missing:
+                violations.append(
+                    f"router_proofs[{idx}] missing keys: {', '.join(missing)}"
+                )
+
+            selected_model = payload.get("selected_model")
+            if not selected_model:
+                violations.append(f"router_proofs[{idx}] selected_model must be non-empty")
+            rationale = payload.get("rationale")
+            if not rationale:
+                violations.append(f"router_proofs[{idx}] rationale must be non-empty")
+
+            fallback_chain = payload.get("fallback_chain")
+            if not isinstance(fallback_chain, list) or len(fallback_chain) < 1:
+                violations.append(
+                    f"router_proofs[{idx}] fallback_chain must be a non-empty list"
+                )
+
+            profile = payload.get("profile")
+            if profile == "writer":
+                has_writer = True
+            elif profile == "reviewer":
+                has_reviewer = True
+                if payload.get("task_kind") != "review":
+                    violations.append(
+                        f"router_proofs[{idx}] reviewer task_kind must be review"
+                    )
+
+            proof_risk = payload.get("risk_level")
+            if proof_risk and proof_risk != proposal.risk_level:
+                violations.append(
+                    f"router_proofs[{idx}] risk_level differs from proposal risk_level"
+                )
+
+        if not has_writer:
+            violations.append("router_proofs missing writer proof")
+            fix_required.append("add writer proof to router_proofs")
+        if not has_reviewer:
+            violations.append("router_proofs missing reviewer proof")
+            fix_required.append("add reviewer proof to router_proofs")
+
+        plan = proposal.plan
+        if plan is None:
+            violations.append("plan must be present")
+        elif not isinstance(plan.steps, list) or len(plan.steps) < 1:
+            violations.append("plan.steps must be a non-empty list")
+        else:
+            for idx, step in enumerate(plan.steps):
+                if not getattr(step, "step", ""):
+                    violations.append(f"plan.steps[{idx}].step must be non-empty")
+
+        context_scan = proposal.context_scan
+        if context_scan is None:
+            violations.append("context_scan must be present")
+        else:
+            if context_scan.task_id != brief.task_id:
+                violations.append("context_scan.task_id must match brief.task_id")
+            if not context_scan.goal:
+                violations.append("context_scan.goal must be non-empty")
+
+        return violations, fix_required
+
     def run(self, brief: TaskBrief) -> PRProposal:
         context_scan = self.scan_context_intent(brief)
         plan = self.planner(brief)
@@ -196,8 +295,7 @@ class SelfDevAgentV4:
             brief, risk, kind, exec_decision
         )
         reflection = self.reflect(brief, risk, kind, review_notes, open_questions)
-
-        return PRProposal(
+        proposal = PRProposal(
             summary=f"SelfDevAgent v4 MVP proposal for task_id={brief.task_id}",
             risk_level=risk,
             task_kind=kind,
@@ -209,3 +307,21 @@ class SelfDevAgentV4:
             reflection=reflection,
             router_proofs=router_proofs,
         )
+
+        _ = self.router.route(profile="reviewer", risk_level=risk, task_kind="review")
+        reviewer_perms = ToolPermissions(profile="reviewer")
+        try:
+            reviewer_perms.assert_can_write()
+            raise AssertionError("reviewer write should have been denied")
+        except PermissionDeniedError:
+            pass
+        try:
+            reviewer_perms.assert_can_run()
+            raise AssertionError("reviewer run should have been denied")
+        except PermissionDeniedError:
+            pass
+
+        violations, fix_required = self.validate_proposal_invariants(proposal, brief)
+        proposal.review_notes.extend([f"[invariant] {note}" for note in violations])
+        proposal.open_questions.extend([f"Fix required: {note}" for note in fix_required])
+        return proposal
