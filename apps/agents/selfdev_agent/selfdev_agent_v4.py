@@ -82,7 +82,11 @@ class SelfDevAgentV4:
         _ = self.router.route(profile="writer", risk_level=risk, task_kind="test_fix")
         perms = ToolPermissions(profile="writer")
         perms.assert_can_run()
-        return {"tests": {"status": "not_run", "notes": "MVP stub"}, "lint": {"status": "not_run"}}
+        return {
+            "tests": {"status": "not_run", "command": "pytest"},
+            "lint": {"status": "not_run", "command": "ruff check ."},
+            "format": {"status": "not_run", "command": "ruff format ."},
+        }
 
     def review(
         self,

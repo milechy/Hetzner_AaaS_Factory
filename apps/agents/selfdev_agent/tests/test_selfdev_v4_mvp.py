@@ -48,3 +48,9 @@ def test_agent_run_returns_proposal():
     for proof in d["router_proofs"]:
         assert "profile" in proof
         assert "selected_model" in proof
+    assert isinstance(d["verification"], dict)
+    for key in ("tests", "lint", "format"):
+        assert key in d["verification"]
+        assert isinstance(d["verification"][key], dict)
+        assert "status" in d["verification"][key]
+        assert "command" in d["verification"][key]
