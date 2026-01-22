@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from .router_client import LLMRouterClient
+from .router_client import LLMRouterClient, RouteDecision
 from .schemas import (
     ContextIntentScan,
     Plan,
     PlanStep,
     PRProposal,
     ReflectionNote,
+    RouterDecisionProof,
     RiskLevel,
     TaskBrief,
     TaskKind,
@@ -71,11 +72,11 @@ class SelfDevAgentV4:
             ]
         )
 
-    def exec(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> List[str]:
-        _ = self.router.route(profile="writer", risk_level=risk, task_kind=kind)
+    def exec(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> tuple[List[str], RouteDecision]:
+        route_decision = self.router.route(profile="writer", risk_level=risk, task_kind=kind)
         perms = ToolPermissions(profile="writer")
         perms.assert_can_write()
-        return ["(MVP) exec stub: would apply code changes under OpenPR boundary."]
+        return ["(MVP) exec stub: would apply code changes under OpenPR boundary."], route_decision
 
     def verify(self, risk: RiskLevel, kind: TaskKind) -> dict:
         _ = self.router.route(profile="writer", risk_level=risk, task_kind="test_fix")
@@ -83,8 +84,8 @@ class SelfDevAgentV4:
         perms.assert_can_run()
         return {"tests": {"status": "not_run", "notes": "MVP stub"}, "lint": {"status": "not_run"}}
 
-    def review(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> List[str]:
-        _ = self.router.route(profile="reviewer", risk_level=risk, task_kind="review")
+    def review(self, brief: TaskBrief, risk: RiskLevel, kind: TaskKind) -> tuple[List[str], RouteDecision]:
+        route_decision = self.router.route(profile="reviewer", risk_level=risk, task_kind="review")
         perms = ToolPermissions(profile="reviewer")
         # Assert reviewer cannot write:
         try:
@@ -92,7 +93,7 @@ class SelfDevAgentV4:
             raise AssertionError("reviewer write should have been denied")
         except PermissionDeniedError:
             pass
-        return ["(MVP) review stub: reviewer read-only notes."]
+        return ["(MVP) review stub: reviewer read-only notes."], route_decision
 
     def reflect(
         self,
@@ -108,10 +109,28 @@ class SelfDevAgentV4:
         context_scan = self.scan_context_intent(brief)
         plan = self.planner(brief)
         risk, kind, _steps = self.plan(brief)
-        _ = self.exec(brief, risk, kind)
+        _, exec_decision = self.exec(brief, risk, kind)
         verification = self.verify(risk, kind)
-        review_notes = self.review(brief, risk, kind)
+        review_notes, review_decision = self.review(brief, risk, kind)
         reflection = self.reflect(brief, risk, kind, review_notes)
+        router_proofs = [
+            RouterDecisionProof(
+                profile="writer",
+                risk_level=risk,
+                task_kind=kind,
+                selected_model=exec_decision.selected_model,
+                rationale=exec_decision.rationale,
+                fallback_chain=exec_decision.fallback_chain,
+            ),
+            RouterDecisionProof(
+                profile="reviewer",
+                risk_level=risk,
+                task_kind="review",
+                selected_model=review_decision.selected_model,
+                rationale=review_decision.rationale,
+                fallback_chain=review_decision.fallback_chain,
+            ),
+        ]
 
         return PRProposal(
             summary=f"SelfDevAgent v4 MVP proposal for task_id={brief.task_id}",
@@ -122,4 +141,5 @@ class SelfDevAgentV4:
             context_scan=context_scan,
             plan=plan,
             reflection=reflection,
+            router_proofs=router_proofs,
         )

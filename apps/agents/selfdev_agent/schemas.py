@@ -73,6 +73,26 @@ class ReflectionNote:
 
 
 @dataclass
+class RouterDecisionProof:
+    profile: Profile
+    risk_level: RiskLevel
+    task_kind: TaskKind
+    selected_model: str
+    rationale: str
+    fallback_chain: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "profile": self.profile,
+            "risk_level": self.risk_level,
+            "task_kind": self.task_kind,
+            "selected_model": self.selected_model,
+            "rationale": self.rationale,
+            "fallback_chain": list(self.fallback_chain),
+        }
+
+
+@dataclass
 class PRProposal:
     summary: str
     risk_level: RiskLevel
@@ -84,6 +104,7 @@ class PRProposal:
     context_scan: Optional[ContextIntentScan] = None
     plan: Optional[Plan] = None
     reflection: List[ReflectionNote] = field(default_factory=list)
+    router_proofs: List[RouterDecisionProof] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -97,4 +118,5 @@ class PRProposal:
             "context_scan": self.context_scan.to_dict() if self.context_scan else None,
             "plan": self.plan.to_dict() if self.plan else None,
             "reflection": [note.to_dict() for note in self.reflection],
+            "router_proofs": [proof.to_dict() for proof in self.router_proofs],
         }
