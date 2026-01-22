@@ -1,0 +1,36 @@
+from apps.agents.selfdev_agent.router_client import LLMRouterClient, RouterRequiredError
+from apps.agents.selfdev_agent.selfdev_agent_v4 import PermissionDeniedError, ToolPermissions, SelfDevAgentV4
+from apps.agents.selfdev_agent.schemas import TaskBrief
+
+
+def test_router_requires_profile():
+    r = LLMRouterClient()
+    try:
+        r.route(profile="invalid", risk_level="low", task_kind="review")
+        raise AssertionError("expected RouterRequiredError")
+    except RouterRequiredError:
+        pass
+
+
+def test_reviewer_cannot_write_or_run():
+    perms = ToolPermissions(profile="reviewer")
+    try:
+        perms.assert_can_write()
+        raise AssertionError("expected PermissionDeniedError")
+    except PermissionDeniedError:
+        pass
+    try:
+        perms.assert_can_run()
+        raise AssertionError("expected PermissionDeniedError")
+    except PermissionDeniedError:
+        pass
+
+
+def test_agent_run_returns_proposal():
+    agent = SelfDevAgentV4(router=LLMRouterClient())
+    brief = TaskBrief(task_id="selfdev-v4-mvp-001", goal="Implement MVP skeleton")
+    proposal = agent.run(brief)
+    d = proposal.to_dict()
+    assert d["risk_level"] in ("low", "medium", "high")
+    assert "summary" in d
+    assert isinstance(d["review_notes"], list)
