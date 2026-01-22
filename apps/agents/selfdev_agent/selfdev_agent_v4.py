@@ -161,9 +161,30 @@ class SelfDevAgentV4:
         risk: RiskLevel,
         kind: TaskKind,
         review_notes: List[str],
+        open_questions: List[str],
     ) -> List[ReflectionNote]:
         _ = brief, risk, kind
-        return [ReflectionNote(note=f"(MVP) reflection stub: {len(review_notes)} review note(s).")]
+        total_notes = len(review_notes)
+        fail_notes = sum(1 for note in review_notes if note.startswith("FAIL"))
+        if total_notes:
+            review_summary = f"Review findings: {total_notes} note(s), {fail_notes} fail(s)."
+        else:
+            review_summary = "Review findings: no notes recorded."
+        notes = [ReflectionNote(note=review_summary)]
+        if fail_notes:
+            next_step = "Next step: address failing review checks and re-validate router_proofs."
+        elif open_questions:
+            next_step = "Next step: answer open questions and align plan vs review outcomes."
+        else:
+            next_step = "Next step: align plan vs review outcomes and prep follow-up actions."
+        notes.append(ReflectionNote(note=next_step))
+        if open_questions:
+            notes.append(
+                ReflectionNote(
+                    note=f"Open questions: {len(open_questions)} item(s) need resolution."
+                )
+            )
+        return notes
 
     def run(self, brief: TaskBrief) -> PRProposal:
         context_scan = self.scan_context_intent(brief)
@@ -174,7 +195,7 @@ class SelfDevAgentV4:
         review_notes, review_decision, router_proofs, open_questions = self.review(
             brief, risk, kind, exec_decision
         )
-        reflection = self.reflect(brief, risk, kind, review_notes)
+        reflection = self.reflect(brief, risk, kind, review_notes, open_questions)
 
         return PRProposal(
             summary=f"SelfDevAgent v4 MVP proposal for task_id={brief.task_id}",

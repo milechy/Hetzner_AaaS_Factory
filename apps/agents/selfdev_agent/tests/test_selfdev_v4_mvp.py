@@ -42,6 +42,9 @@ def test_agent_run_returns_proposal():
     assert isinstance(d["plan"]["steps"], list)
     assert 1 <= len(d["plan"]["steps"]) <= 3
     assert isinstance(d["reflection"], list)
+    assert len(d["reflection"]) >= 2
+    assert "note" in d["reflection"][0]
+    assert ("review" in d["reflection"][0]["note"].lower()) or ("note(s)" in d["reflection"][0]["note"])
     assert "router_proofs" in d
     assert isinstance(d["router_proofs"], list)
     assert len(d["router_proofs"]) >= 2
