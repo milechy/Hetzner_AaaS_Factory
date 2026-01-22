@@ -34,6 +34,8 @@ def test_agent_run_returns_proposal():
     assert d["risk_level"] in ("low", "medium", "high")
     assert "summary" in d
     assert isinstance(d["review_notes"], list)
+    assert d["open_questions"] == []
+    assert any("PASS" in note for note in d["review_notes"])
     assert isinstance(d["context_scan"], dict)
     assert d["context_scan"]["task_id"] == brief.task_id
     assert isinstance(d["plan"], dict)
