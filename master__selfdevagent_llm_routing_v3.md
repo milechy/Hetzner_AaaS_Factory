@@ -70,4 +70,55 @@ Router は必ず以下を返す:
 
 Agent は selected_model をログに残し、ツール呼び出し時に `profile` を必ず付与する。
 
+---
+
+## PRProposal.router_proofs (RouterDecisionProof) — SSOT
+
+### Purpose
+SelfDevAgent v4 の proposal-only 出力 `PRProposal.router_proofs` は、
+**「どの profile が、どの条件で、どのモデルを選んだか」**を機械検証できる形で残す。
+人間レビュー／CI／後続エージェントが、**ルーティング逸脱**を検知するための根拠とする。
+
+### Data Contract (required)
+`router_proofs[]` の各要素（RouterDecisionProof）は以下を必須とする:
+
+- `profile`
+- `risk_level`
+- `task_kind`
+- `selected_model`
+- `rationale`
+- `fallback_chain`
+
+### Invariants (validation rules)
+以下は **Hard**（逸脱は failure 扱い）:
+
+1) **proposal-only boundary**
+- `router_proofs` は「ルーティングの証跡」であり、PR作成や git 操作の権限を与えない。
+- proposal payload に含めるだけで、外部副作用は持たない。
+
+2) **Minimum proofs**
+- `router_proofs` は **最低2件**を含む（writer → reviewer の順）。
+  - 1件目: profile=`writer`
+  - 2件目: profile=`reviewer`
+
+3) **Profile ↔ Model mapping**
+- profile=`writer` の `selected_model` は **Codex 系**でなければならない。
+- profile=`reviewer` の `selected_model` は **Opus 4.5**でなければならない。
+（具体名は Implementation が持ってよいが、SSOT として “writer≠reviewer” は固定）
+
+4) **Task-kind consistency**
+- reviewer proof の `task_kind` は **必ず** `review`。
+- writer proof の `task_kind` は実タスク種別（例: implement / ssot_update）を反映する。
+
+5) **Traceability**
+- rationale は空文字禁止。
+- fallback_chain は空配列禁止。selected_model を含むこと。
+
+### Consumer guidance
+CI / Review agent は以下を自動チェックできる:
+- proofs 件数（>=2）
+- writer/reviewer の順序
+- profile と model の整合性
+- fallback_chain の健全性（空でない・selected_model を含む）
+
 # END
