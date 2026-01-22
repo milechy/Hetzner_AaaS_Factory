@@ -10,6 +10,7 @@ from .schemas import (
     Plan,
     PlanStep,
     PRProposal,
+    ProposalValidation,
     ReflectionNote,
     RouterDecisionProof,
     RiskLevel,
@@ -187,7 +188,7 @@ class SelfDevAgentV4:
             )
         return notes
 
-    def validate_proposal_invariants(
+    def _collect_invariant_findings(
         self, proposal: PRProposal, brief: TaskBrief
     ) -> List[InvariantFinding]:
         findings: List[InvariantFinding] = []
@@ -338,6 +339,43 @@ class SelfDevAgentV4:
 
         return findings
 
+    def validate_proposal_invariants(
+        self, proposal: PRProposal, brief: TaskBrief
+    ) -> ProposalValidation:
+        checked_items = [
+            "router_proofs_count",
+            "router_proofs_profiles",
+            "router_proofs_fields",
+            "router_proofs_reviewer_task_kind",
+            "plan_presence",
+            "plan_steps",
+            "plan_step_non_empty",
+            "context_scan_presence",
+            "context_task_id_match",
+            "context_goal_non_empty",
+            "risk_level_consistency",
+        ]
+        findings = proposal.invariant_findings or self._collect_invariant_findings(
+            proposal, brief
+        )
+        violations: List[str] = []
+        warnings: List[str] = []
+        fix_required_questions: List[str] = []
+        for finding in findings:
+            entry = f"{finding.code}: {finding.message}"
+            if finding.severity == "fix_required":
+                violations.append(entry)
+                fix_required_questions.append(f"Fix required: {entry}")
+            else:
+                warnings.append(entry)
+        return ProposalValidation(
+            invariants_ok=len(violations) == 0,
+            violations=violations,
+            warnings=warnings,
+            fix_required_questions=fix_required_questions,
+            checked_items=checked_items,
+        )
+
     def run(self, brief: TaskBrief) -> PRProposal:
         context_scan = self.scan_context_intent(brief)
         plan = self.planner(brief)
@@ -374,8 +412,9 @@ class SelfDevAgentV4:
         except PermissionDeniedError:
             pass
 
-        findings = self.validate_proposal_invariants(proposal, brief)
+        findings = self._collect_invariant_findings(proposal, brief)
         proposal.invariant_findings = findings
+        proposal.validation = self.validate_proposal_invariants(proposal, brief)
         for finding in findings:
             if finding.severity == "warn":
                 proposal.review_notes.append(f"[WARN] {finding.code}: {finding.message}")
