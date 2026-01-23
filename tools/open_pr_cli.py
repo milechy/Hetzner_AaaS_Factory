@@ -253,7 +253,15 @@ def main() -> None:
     if args.approval_request:
         with open(args.approval_request, "r", encoding="utf-8") as f:
             approval_req = json.load(f)
-        proposal_hash = approval_req["normalizedProposalHash"]
+        # MUST verify hash before trusting approval request
+        computed_hash = canonical_proposal_hash(proposal)
+        claimed_hash = approval_req["normalizedProposalHash"]
+        if computed_hash != claimed_hash:
+            print(f"[OpenPR] ERROR: APPROVAL_REQUEST_HASH_MISMATCH")
+            print(f"[OpenPR] computed_hash={computed_hash}")
+            print(f"[OpenPR] claimed_hash={claimed_hash}")
+            raise SystemExit(11)  # Exit code 11 for APPROVAL_REQUEST_HASH_MISMATCH
+        proposal_hash = computed_hash
     else:
         proposal_hash = canonical_proposal_hash(proposal)
 
