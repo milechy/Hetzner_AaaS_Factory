@@ -215,4 +215,14 @@ Each event SHOULD include:
 
 ---
 
+## Factory Positioning (Decision)
+
+- Factory is an AI development orchestration SDK.
+- Claude Code / Codex / Opus / Grok / Qwen are execution engines, not the Factory itself.
+- Factory development is human-driven with coding agents.
+- Factory-orchestrated targets are developed automatically.
+- Current milestone: Safe external-repo PR creation (proposal-only).
+
+---
+
 # END OF SSOT

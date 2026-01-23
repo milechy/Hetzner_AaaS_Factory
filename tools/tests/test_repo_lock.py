@@ -184,5 +184,142 @@ class TestRepoLock(unittest.TestCase):
             self.lock.release()
 
 
+class TestOpenPRCLI(unittest.TestCase):
+    """Tests for tools/open_pr_cli.py functionality."""
+
+    def setUp(self):
+        self.proposal = {
+            "metadata": {
+                "repo": "owner/external-repo",
+                "baseBranch": "main",
+                "proposalId": "test-123",
+                "headBranch": "proposal/test-123",
+                "title": "Test Proposal",
+                "body": "Test body",
+            },
+            "changes": {
+                "files": []
+            }
+        }
+
+    def test_patch_only_rejected(self):
+        """Test that patch-only files are rejected with PATCH_NOT_SUPPORTED."""
+        from tools.open_pr_cli import apply_file_changes
+
+        self.proposal["changes"]["files"] = [
+            {"path": "test.txt", "patch": "@@ -1,1 +1,1 @@\n-old\n+new\n"}
+        ]
+
+        with self.assertRaises(SystemExit) as ctx:
+            apply_file_changes(
+                self.proposal,
+                repo="owner/repo",
+                branch_name="test-branch",
+                api="https://api.github.com",
+                gh_token="test-token",
+                dry_run=False
+            )
+        self.assertEqual(ctx.exception.code, 10)
+
+    @patch('tools.open_pr_cli.requests.put')
+    @patch('tools.open_pr_cli.requests.get')
+    def test_content_b64_triggers_put(self, mock_get, mock_put):
+        """Test that content_b64 triggers PUT with correct URL/branch/path."""
+        from tools.open_pr_cli import apply_file_changes
+
+        self.proposal["changes"]["files"] = [
+            {"path": "test.txt", "content_b64": "dGVzdCBjb250ZW50"}
+        ]
+
+        # Mock GET response (file doesn't exist)
+        get_resp = Mock()
+        get_resp.status_code = 404
+        mock_get.return_value = get_resp
+
+        # Mock PUT response
+        put_resp = Mock()
+        put_resp.status_code = 201
+        put_resp.raise_for_status = Mock()
+        mock_put.return_value = put_resp
+
+        apply_file_changes(
+            self.proposal,
+            repo="owner/external-repo",
+            branch_name="proposal/test-123",
+            api="https://api.github.com",
+            gh_token="test-token",
+            dry_run=False
+        )
+
+        # Verify PUT was called with correct URL
+        mock_put.assert_called_once()
+        args, kwargs = mock_put.call_args
+        self.assertIn("owner/external-repo", args[0])
+        self.assertIn("test.txt", args[0])
+        self.assertEqual(kwargs["json"]["branch"], "proposal/test-123")
+        self.assertEqual(kwargs["json"]["content"], "dGVzdCBjb250ZW50")
+
+    def test_urls_use_proposal_metadata_repo(self):
+        """Test that URLs use proposal.metadata.repo (external repo)."""
+        from tools.open_pr_cli import apply_file_changes
+
+        self.proposal["metadata"]["repo"] = "external-org/external-repo"
+        self.proposal["changes"]["files"] = [
+            {"path": "README.md", "content_b64": "cmVhZG1l"}
+        ]
+
+        with patch('tools.open_pr_cli.requests.get') as mock_get, \
+             patch('tools.open_pr_cli.requests.put') as mock_put:
+
+            get_resp = Mock()
+            get_resp.status_code = 404
+            mock_get.return_value = get_resp
+
+            put_resp = Mock()
+            put_resp.status_code = 201
+            put_resp.raise_for_status = Mock()
+            mock_put.return_value = put_resp
+
+            apply_file_changes(
+                self.proposal,
+                repo="external-org/external-repo",
+                branch_name="proposal/test-123",
+                api="https://api.github.com",
+                gh_token="test-token",
+                dry_run=False
+            )
+
+            # Verify URLs contain external repo
+            args, _ = mock_put.call_args
+            self.assertIn("external-org/external-repo", args[0])
+
+    def test_dry_run_no_writes(self):
+        """Test that dry-run does zero writes (no POST/PUT/DELETE)."""
+        from tools.open_pr_cli import apply_file_changes
+
+        self.proposal["changes"]["files"] = [
+            {"path": "test.txt", "content_b64": "dGVzdA=="},
+            {"path": "delete.txt", "delete": True},
+        ]
+
+        with patch('tools.open_pr_cli.requests.get') as mock_get, \
+             patch('tools.open_pr_cli.requests.put') as mock_put, \
+             patch('tools.open_pr_cli.requests.delete') as mock_delete:
+
+            apply_file_changes(
+                self.proposal,
+                repo="owner/repo",
+                branch_name="test-branch",
+                api="https://api.github.com",
+                gh_token="test-token",
+                dry_run=True
+            )
+
+            # Verify no HTTP operations were performed
+            mock_get.assert_not_called()
+            mock_put.assert_not_called()
+            mock_delete.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
