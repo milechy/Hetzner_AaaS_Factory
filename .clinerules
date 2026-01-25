@@ -1,0 +1,124 @@
+version: "1.0"
+
+defaultMode: plan
+
+planMode:
+  enabled: true
+  autoApprove: false
+  showDiff: true
+  explainChanges: true
+
+subagents:
+  enabled: true
+  maxConcurrent: 2
+  agents:
+    - name: "ssot-guardian"
+      focus: "master__*.md"
+      skills: [factory-ssot-knowledge, controlled-git-contract]
+      constraints:
+        - "Never weaken safety guarantees from v1.2"
+        - "Always maintain backward compatibility"
+        - "contractVersion changes require explicit approval"
+
+    - name: "implementation-agent"
+      focus: ["controlled_git/**/*.py", "tools/**/*.py"]
+      skills: [factory-ssot-knowledge, approval-token-spec]
+      constraints:
+        - "Implementation MUST match SSOT"
+        - "No write operations without approval token"
+        - "Always use canonical_proposal_hash"
+
+    - name: "test-agent"
+      focus: "tools/tests/**/*.py"
+      skills: [factory-ssot-knowledge]
+      constraints:
+        - "Never break existing tests"
+        - "Mock external dependencies (GitHub API)"
+
+rules:
+  - pattern: "master__*.md"
+    mode: plan
+    requireTests: false
+    reviewRequired: true
+    rationale: "SSOT is the contract; any change affects all implementations"
+
+  - pattern: "controlled_git/cli.py"
+    mode: plan
+    requireTests: true
+    reviewRequired: true
+    rationale: "Handles approval token signature verification"
+
+  - pattern: "tools/open_pr_cli.py"
+    mode: plan
+    requireTests: true
+    reviewRequired: true
+    rationale: "Executes write operations; must match SSOT contract"
+
+  - pattern: "tools/repo_lock.py"
+    mode: plan
+    requireTests: true
+
+  - pattern: "tools/pr_scheduler.py"
+    mode: plan
+    requireTests: true
+
+  - pattern: "tools/tests/**/*.py"
+    mode: edit
+
+  - pattern: "scripts/**/*.sh"
+    mode: plan
+    reviewRequired: true
+    rationale: "Scripts affect CI/CD and review process"
+
+fileSizeLimit:
+  warn: 400
+  error: 800
+
+incrementalDevelopment:
+  enabled: true
+  maxChangesPerCommit: 3
+  preferSmallPRs: true
+
+customInstructions: |
+  # Hetzner AaaS Factory Development Rules
+
+  ## Core Principles (from SSOT)
+  1. Factory = SDK (not a product)
+  2. PR-first / proposal-driven / human-in-the-loop
+  3. default-deny (allowlist-only)
+  4. fail-safe on GitHub 401/403
+
+  ## SSOT Contract (v1.3)
+  - master__open_pr_contract_v1_3.md is the source of truth
+  - Implementation MUST match SSOT
+  - No weakening of v1.2 safety guarantees
+  - Backward compatibility MUST be maintained
+
+  ## Approval Token Rules
+  - humanApproved=true MUST be enforced
+  - actorId binding is mandatory-by-default (v1.3)
+  - Signature verification uses canonical_proposal_hash
+  - Token scope MUST match: repo/baseBranch/proposalHash/actorId
+
+  ## Implementation Constraints
+  - No autonomous apply (human approval required)
+  - GitHub 401/403 → fallback URL (never abort)
+  - RepoLock/PRSchedule gates BEFORE any write
+  - audit log is best-effort (never block execution)
+
+  ## Prohibited
+  - Breaking v1.2 compatibility
+  - Weakening actor binding
+  - Auto-merge without approval
+  - Secrets in code
+
+  ## Testing Strategy
+  - Unit: Mock GitHub API
+  - Integration: Use test repos
+  - Never test against production repos
+
+  ## Code Style
+  - Python 3.11+
+  - Minimal dependencies (stdlib preferred)
+  - requests optional (stdlib shim fallback)
+  - Type hints for public APIs
