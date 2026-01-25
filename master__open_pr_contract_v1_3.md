@@ -65,6 +65,25 @@ An Approval Token MUST contain:
 - Any mismatch MUST be treated as a hard denial
 - Denial reason SHOULD be machine-readable
 
+**Actor ID Type:**
+- `actorId` MUST be treated as an opaque string
+- Numeric-only strings (e.g. "12345") are permitted
+- Empty strings or whitespace-only values MUST be rejected
+- RECOMMENDED: Use stable GitHub username (e.g. "milechy")
+
+**Actor ID Source (Priority Order):**
+1. `--actor` CLI argument (highest priority)
+2. `CG_ACTOR` environment variable (Factory-specific)
+3. `GITHUB_ACTOR` environment variable (GitHub Actions context)
+
+If no actor ID is provided via any of the above sources, execution MUST be denied.
+
+**Actor ID Validation:**
+- Token scope MUST include `actorId` field
+- Runtime `actorId` MUST match `token.scope.actorId` exactly (string comparison)
+- Mismatch results in `APPROVAL_ACTOR_MISMATCH` (403-equivalent denial)
+- Missing `actorId` in token scope results in denial
+
 ### 3.3 Revocation (OPTIONAL)
 If `APPROVAL_REVOCATION_LIST_PATH` is configured:
 
