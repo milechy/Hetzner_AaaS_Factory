@@ -123,6 +123,37 @@ Violation results in denial.
 - `maxFilesTouched` limits MUST be enforced
 - `blockedWhen.pathsPrefix` MUST be evaluated against normalized paths
 
+### 4.4 DELETE Operation DoD (MUST)
+
+**DELETE Request Handling:**
+- DELETE operations MUST be executed via GitHub Contents API
+- File path MUST be normalized (no leading `/`, no `..` segments)
+- Current file SHA MUST be retrieved before deletion
+
+**404 Not Found Behavior:**
+- If target file does not exist (HTTP 404), execution MUST continue
+- 404 MUST be logged as WARNING (not ERROR)
+- PR result summary MUST include warning: "File not found for deletion: {path}"
+- This is NOT treated as a failure (exit code remains success)
+
+**Other Error Behavior:**
+- Non-404 errors (403, 422, 500, etc.) MUST abort execution
+- Error reason MUST be logged to audit log
+- Execution MUST stop (fail-fast)
+
+**Audit Log Requirements:**
+- DELETE attempts MUST be recorded in audit log
+- Log entry MUST include:
+  - Target file path
+  - HTTP status code
+  - Result (success / not_found / failed)
+  - Timestamp
+
+**Rationale:**
+- 404 tolerance: Idempotent DELETE (already deleted = success)
+- Other errors: May indicate permission issues or repo corruption
+- Fail-safe: Better to warn than silently skip important deletions
+
 ---
 
 ## 5. GitHub API Base URL (SHOULD + Guarded)
