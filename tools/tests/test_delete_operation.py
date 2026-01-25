@@ -106,3 +106,55 @@ def test_delete_success(delete_proposal, mock_requests, capsys):
     captured = capsys.readouterr()
     assert "deleted" in captured.out.lower()
     assert "to_delete.txt" in captured.out
+
+
+def test_delete_422_abort(delete_proposal, mock_requests):
+    """Test DELETE with 422 error aborts execution."""
+    # Mock GET (file exists)
+    get_response = MagicMock()
+    get_response.status_code = 200
+    get_response.json.return_value = {"sha": "file-sha-123"}
+    mock_requests.get.return_value = get_response
+
+    # Mock DELETE (unprocessable entity)
+    delete_response = MagicMock()
+    delete_response.status_code = 422
+    delete_response.raise_for_status.side_effect = RuntimeError("422 Unprocessable Entity")
+    mock_requests.delete.return_value = delete_response
+
+    # Should raise (fail-fast)
+    with pytest.raises(RuntimeError):
+        apply_file_changes(
+            delete_proposal,
+            repo="owner/repo",
+            branch_name="test-branch",
+            api="https://api.github.com",
+            gh_token="test-token",
+            dry_run=False
+        )
+
+
+def test_delete_500_abort(delete_proposal, mock_requests):
+    """Test DELETE with 500 error aborts execution."""
+    # Mock GET (file exists)
+    get_response = MagicMock()
+    get_response.status_code = 200
+    get_response.json.return_value = {"sha": "file-sha-123"}
+    mock_requests.get.return_value = get_response
+
+    # Mock DELETE (server error)
+    delete_response = MagicMock()
+    delete_response.status_code = 500
+    delete_response.raise_for_status.side_effect = RuntimeError("500 Internal Server Error")
+    mock_requests.delete.return_value = delete_response
+
+    # Should raise (fail-fast)
+    with pytest.raises(RuntimeError):
+        apply_file_changes(
+            delete_proposal,
+            repo="owner/repo",
+            branch_name="test-branch",
+            api="https://api.github.com",
+            gh_token="test-token",
+            dry_run=False
+        )

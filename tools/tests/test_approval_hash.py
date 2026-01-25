@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import pytest
 from unittest.mock import patch
 
@@ -35,13 +36,17 @@ def proposal_file(tmp_path):
 @pytest.fixture
 def approval_token_file(tmp_path):
     """Create temporary approval token file."""
+    # Use relative timestamps (1 year from now)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=365)
+
     token = {
         "id": "token-uuid",
         "scope": {
             "repo": "owner/repo",
             "baseBranch": "main",
             "proposalHash": "sha256:correct_hash",
-            "expiresAt": "2026-12-31T23:59:59Z",
+            "expiresAt": expires.isoformat().replace("+00:00", "Z"),
             "actorId": "milechy"
         },
         "signature": "hmac-sha256:test"
@@ -62,18 +67,20 @@ def test_approval_hash_mismatch_exits_11(proposal_file, approval_token_file, tmp
     approval_req_file = tmp_path / "approval_req.json"
     approval_req_file.write_text(json.dumps(approval_req))
 
-    with patch('sys.argv', [
-        'open_pr_cli.py',
-        '--proposal', proposal_file,
-        '--approval-token', str(approval_token_file),
-        '--approval-request', str(approval_req_file),
-        '--actor', 'milechy'
-    ]):
-        with pytest.raises(SystemExit) as exc_info:
-            open_pr_main()
+    # Mock verify_approval to focus on hash check only
+    with patch('tools.open_pr_cli.verify_approval'):
+        with patch('sys.argv', [
+            'open_pr_cli.py',
+            '--proposal', proposal_file,
+            '--approval-token', str(approval_token_file),
+            '--approval-request', str(approval_req_file),
+            '--actor', 'milechy'
+        ]):
+            with pytest.raises(SystemExit) as exc_info:
+                open_pr_main()
 
-        # Exit code 11 for hash mismatch
-        assert exc_info.value.code == 11
+            # Exit code 11 for hash mismatch
+            assert exc_info.value.code == 11
 
 
 def test_approval_hash_match_proceeds(proposal_file, approval_token_file, tmp_path, monkeypatch):

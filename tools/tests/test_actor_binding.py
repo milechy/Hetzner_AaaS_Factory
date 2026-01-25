@@ -1,30 +1,32 @@
 """Test actor binding validation in approval tokens."""
 from __future__ import annotations
-import json
-import os
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import pytest
 from unittest.mock import patch
 
 # Add parent directory to sys.path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from controlled_git.cli import verify_token, _require_scope, CGError
+from controlled_git.cli import _require_scope, CGError
 
 
 @pytest.fixture
 def valid_token():
     """Valid approval token with actorId."""
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=1)
+
     return {
         "id": "test-uuid",
-        "issuedAt": "2026-01-25T00:00:00Z",
+        "issuedAt": now.isoformat().replace("+00:00", "Z"),
         "issuedBy": "human",
         "scope": {
             "repo": "owner/repo",
             "baseBranch": "main",
             "proposalHash": "sha256:abc123",
-            "expiresAt": "2026-01-26T00:00:00Z",
+            "expiresAt": expires.isoformat().replace("+00:00", "Z"),
             "actions": ["open_pr"],
             "actorId": "milechy"
         },
