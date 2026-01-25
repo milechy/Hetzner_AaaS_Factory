@@ -14,3 +14,15 @@ pr_result.json
 
 # Local evidence packs (do not commit)
 SelfDev_Evidence_*.zip
+
+# Claude Code
+.mcp/
+
+# Python (additional)
+*$py.class
+.pytest_cache/
+.coverage
+
+# Secrets (additional)
+.env
+.env.*
