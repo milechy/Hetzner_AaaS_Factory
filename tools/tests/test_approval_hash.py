@@ -1,8 +1,14 @@
 """Test approval_request hash verification."""
 from __future__ import annotations
 import json
+import sys
+from pathlib import Path
 import pytest
 from unittest.mock import patch
+
+# Add parent directory to sys.path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from tools.open_pr_cli import main as open_pr_main
 
 
@@ -71,7 +77,7 @@ def test_approval_hash_mismatch_exits_11(proposal_file, approval_token_file, tmp
 
 
 def test_approval_hash_match_proceeds(proposal_file, approval_token_file, tmp_path, monkeypatch):
-    """Test matching hash allows execution to proceed."""
+    """Test matching hash allows execution to proceed past hash check."""
     # Mock canonical_proposal_hash to return known value
     with patch('tools.open_pr_cli.canonical_proposal_hash') as mock_hash:
         mock_hash.return_value = "sha256:matching_hash"
@@ -88,20 +94,22 @@ def test_approval_hash_match_proceeds(proposal_file, approval_token_file, tmp_pa
         monkeypatch.setenv("GITHUB_TOKEN", "test-token")
         monkeypatch.setenv("APPROVAL_HMAC_SECRET", "test-secret")
 
-        # Mock verify_approval to avoid actual token validation
-        with patch('tools.open_pr_cli.verify_approval'):
-            with patch('tools.open_pr_cli.assert_no_open_factory_pr'):
-                # Should NOT exit with code 11
-                # (will fail later due to mocked GitHub API, but hash check passes)
-                with pytest.raises(SystemExit) as exc_info:
-                    with patch('sys.argv', [
-                        'open_pr_cli.py',
-                        '--proposal', proposal_file,
-                        '--approval-token', str(approval_token_file),
-                        '--approval-request', str(approval_req_file),
-                        '--actor', 'milechy'
-                    ]):
-                        open_pr_main()
+        # Mock ALL GitHub API calls
+        with patch('tools.open_pr_cli.requests') as mock_requests:
+            # Mock verify_approval to avoid actual token validation
+            with patch('tools.open_pr_cli.verify_approval'):
+                with patch('tools.open_pr_cli.assert_no_open_factory_pr'):
+                    # Hash check should pass, then fail on GitHub API
+                    with pytest.raises(SystemExit) as exc_info:
+                        with patch('sys.argv', [
+                            'open_pr_cli.py',
+                            '--proposal', proposal_file,
+                            '--approval-token', str(approval_token_file),
+                            '--approval-request', str(approval_req_file),
+                            '--actor', 'milechy'
+                        ]):
+                            open_pr_main()
 
-                # Should NOT be exit code 11
-                assert exc_info.value.code != 11
+                    # Should NOT be exit code 11 (hash mismatch)
+                    # Will be different error (GitHub API mock)
+                    assert exc_info.value.code != 11

@@ -1,7 +1,13 @@
 """Test DELETE operation behavior (404 vs other errors)."""
 from __future__ import annotations
+import sys
+from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
+
+# Add parent directory to sys.path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from tools.open_pr_cli import apply_file_changes
 
 
